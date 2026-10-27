@@ -1,0 +1,2502 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A1A3F">
+<title>Cap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Carte plein écran. Menu en haut à gauche, boutons son et musique à droite,
+   compteur, nom de rue et signalement au-dessus du panneau de recherche. Bleu marine + blanc. */
+:root{
+  --navy-950:#06112B; --navy-900:#0A1A3F; --navy-800:#102659; --navy-700:#1A3678;
+  --blue:#4C86FF; --ice:#DCE7FF; --white:#FFFFFF; --amber:#FFC83D;
+  --font:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overscroll-behavior:none;background:var(--navy-900);color:var(--white);font-family:var(--font);overflow:hidden;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+svg{display:block}
+[hidden]{display:none!important}
+
+#map{position:fixed;inset:0;background:var(--navy-900)}
+#map.rot{inset:auto;will-change:transform;transform-origin:50% 50%}
+#map.rot .pin{transform:rotate(var(--ur,0deg))}
+#map.rot .dest{transform:rotate(calc(var(--ur,0deg) - 45deg))}
+#btnCompass svg{transition:none}
+.leaflet-tile-pane{transition:filter .7s ease;filter:invert(1) grayscale(1) brightness(1.7) contrast(1.15) sepia(1) hue-rotate(185deg) saturate(2.6)}
+body[data-map=day] .leaflet-tile-pane{filter:none}
+body[data-map=day] #map{background:#EDEAE2}
+.leaflet-popup-content-wrapper{background:var(--navy-900);color:var(--white);border-radius:14px;font-family:var(--font)}
+.leaflet-popup-tip{background:var(--navy-900)}
+.leaflet-container a.leaflet-popup-close-button{color:var(--ice)}
+
+/* Boutons flottants */
+.sq{position:fixed;top:max(12px,var(--sat));left:max(12px,var(--sal));z-index:1100;width:56px;height:56px;border-radius:16px;background:var(--navy-950);border:1px solid var(--navy-700);display:grid;place-items:center;box-shadow:0 8px 22px rgba(6,17,43,.5)}
+[data-mode=nav] .sq,[data-mode=preview] .sq,body.exp .sq{display:none}
+#rightBtns{position:fixed;right:max(12px,var(--sar));top:34%;z-index:1100;display:flex;flex-direction:column;gap:12px}
+body.exp #rightBtns{display:none}
+body.embp #rightBtns{top:max(34%,420px)}
+.rbtn{width:56px;height:56px;border-radius:50%;background:var(--navy-950);border:1px solid var(--navy-700);display:grid;place-items:center;box-shadow:0 8px 22px rgba(6,17,43,.5)}
+#soundPop{position:absolute;right:68px;top:68px;width:210px;background:var(--navy-900);border:1px solid var(--navy-700);border-radius:16px;padding:6px;box-shadow:0 10px 28px rgba(6,17,43,.6)}
+#soundPop button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 12px;border-radius:12px;font-weight:700;font-size:15px;text-align:left}
+#soundPop button[aria-checked=true]{background:var(--white);color:var(--navy-900)}
+
+/* Guidage */
+#top{position:fixed;left:0;right:0;top:0;z-index:1100;padding:max(12px,var(--sat)) max(12px,var(--sar)) 0 max(12px,var(--sal));pointer-events:none}
+#banner{display:none;gap:14px;align-items:center;background:var(--navy-900);border-radius:18px;padding:12px 16px 12px 12px;box-shadow:0 10px 28px rgba(6,17,43,.55);border:1px solid var(--navy-700);pointer-events:auto}
+[data-mode=nav] #banner{display:flex}
+.bicon{flex:none;width:64px;height:64px;border-radius:14px;background:var(--white);color:var(--navy-900);display:grid;place-items:center}
+.bicon svg{width:40px;height:40px}
+.btext{min-width:0}
+.bdist{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.binstr{font-size:15px;font-weight:600;color:var(--ice);margin-top:3px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(max(12px,var(--sat)) + 70px);z-index:1500;max-width:min(92vw,420px);background:var(--white);color:var(--navy-900);font-weight:700;font-size:14px;padding:12px 16px;border-radius:14px;box-shadow:0 8px 24px rgba(6,17,43,.5);display:flex;gap:10px;align-items:center}
+[data-mode=nav] #toast{top:calc(max(12px,var(--sat)) + 112px)}
+#toast .tdot{flex:none;width:12px;height:12px;border-radius:50%;background:var(--blue)}
+
+/* Panneau du bas */
+#sheet{position:fixed;left:0;right:0;bottom:0;top:max(12px,var(--sat));transform:translateY(calc(100% - 200px));transition:transform .4s cubic-bezier(.2,.85,.25,1);will-change:transform;z-index:1100;background:var(--navy-900);border-radius:22px 22px 0 0;padding:4px max(16px,var(--sar)) calc(6px + var(--sab)) max(16px,var(--sal));display:flex;flex-direction:column;gap:10px;box-shadow:0 -10px 30px rgba(6,17,43,.5);border-top:1px solid var(--navy-700)}
+#sheet.dragging,#sheet.noanim{transition:none}
+#handle{align-self:stretch;width:100%;height:34px;display:grid;place-items:center;flex:none;touch-action:none;cursor:grab}
+#handle:active{transform:none}
+#handle::before{content:"";width:44px;height:5px;border-radius:3px;background:rgba(220,231,255,.4)}
+#idleBlock{display:flex;flex-direction:column;gap:12px;min-height:0;flex:none}
+#sheet.exp #idleBlock,#sheet.tall #idleBlock{flex:1}
+[data-mode=preview] #idleBlock,[data-mode=nav] #idleBlock,[data-mode=preview] #handle{display:none}
+.search{display:flex;align-items:center;gap:10px;background:var(--navy-800);border:1px solid var(--navy-700);border-radius:30px;padding:0 8px 0 16px;height:56px;flex:none}
+.search svg{flex:none;color:var(--ice)}
+.search input{flex:1;min-width:0;border:0;background:none;font:600 17px var(--font);color:var(--white);height:100%}
+.search input::placeholder{color:#9DB2E6}
+.search input:focus-visible{outline:none}
+.search .mic{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center}
+#chips{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding:2px 0 4px;flex:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:flex;align-items:center;gap:8px;padding:12px 16px;border:1.5px solid var(--navy-700);border-radius:18px;font-weight:800;font-size:17px;white-space:nowrap}
+.chip.unset{color:var(--ice)}
+.chip.add{color:var(--blue)}
+.chip .em{font-size:20px;line-height:1}
+#more{display:none;flex:1;min-height:0;overflow-y:auto;flex-direction:column}
+#sheet.exp #more,#sheet.tall #more{display:flex}
+.mlabel{font-size:14px;color:var(--ice);padding:14px 4px 6px}
+.none{padding:14px 4px;font-size:15px;color:var(--ice)}
+.lrow{display:flex;align-items:center;gap:14px;width:100%;padding:14px 4px;text-align:left;border-bottom:1px solid var(--navy-800);min-height:64px}
+.lrow .ic{flex:none;width:44px;height:44px;border-radius:50%;background:var(--c,var(--navy-700));display:grid;place-items:center;font-size:21px}
+.lrow .lt{flex:1;min-width:0}
+.lrow .lt b{display:block;font-size:17px;font-weight:700;line-height:1.25}
+.lrow .lt small{display:block;font-size:14px;font-weight:500;color:var(--ice);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .chev{flex:none;color:var(--ice)}
+.lrow .del{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--ice)}
+.credit{font-size:10px;color:#8FA6D9;text-align:center;flex:none}
+.credit a{color:inherit}
+#sheet.exp .credit,#sheet.tall .credit{display:none}
+[data-mode=preview] .credit,[data-mode=nav] .credit{display:none}
+
+/* Éléments au-dessus du panneau */
+#floats{position:absolute;left:0;right:0;bottom:100%;padding:0 max(12px,var(--sar)) 12px max(12px,var(--sal));display:flex;align-items:flex-end;gap:10px;pointer-events:none}
+#floats>*{pointer-events:auto}
+#sheet.exp #floats,#sheet.tall #floats{display:none}
+#speed{flex:none;width:78px;height:78px;border-radius:50%;background:var(--navy-950);border:5px solid var(--navy-700);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(6,17,43,.5)}
+#speed b{font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#speed span{font-size:11px;font-weight:600;color:var(--ice);margin-top:2px}
+#street{flex:1 1 0;min-width:0;max-width:240px;margin:0 auto;background:var(--navy-950);border:1px solid var(--navy-700);font-weight:800;font-size:17px;padding:14px 18px;border-radius:30px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 8px 22px rgba(6,17,43,.5)}
+#floatR{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:none}
+.fab{width:52px;height:52px;border-radius:50%;background:var(--white);color:var(--navy-900);display:grid;place-items:center;box-shadow:0 6px 18px rgba(6,17,43,.5)}
+.reportfab{width:72px;height:72px;border-radius:50%;background:var(--navy-950);border:1px solid var(--navy-700);display:grid;place-items:center;box-shadow:0 8px 22px rgba(6,17,43,.5)}
+.reportfab svg{width:46px;height:46px}
+
+#preview,#navbar{display:none}
+[data-mode=preview] #preview{display:flex}
+[data-mode=nav] #navbar{display:flex}
+#preview{flex-direction:column;gap:10px;padding-top:8px}
+.ptitle{font-size:13px;font-weight:600;color:var(--ice);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmeta{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.pmeta small{font-size:15px;font-weight:600;color:var(--ice);margin-left:6px}
+.row{display:flex;gap:10px}
+.btn{flex:1;padding:15px 16px;border-radius:30px;font-weight:800;font-size:16px;text-align:center}
+.btn.primary{background:var(--white);color:var(--navy-900)}
+.btn.ghost{background:var(--navy-800);color:var(--white);border:1px solid var(--navy-700)}
+#navbar{align-items:center;justify-content:space-between;gap:12px;padding-top:8px}
+.stat{min-width:0}
+.stat b{display:block;font-size:28px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.stat span{font-size:14px;font-weight:600;color:var(--ice);font-variant-numeric:tabular-nums}
+#btnStop{flex:none;padding:14px 22px;border-radius:30px;background:var(--white);color:var(--navy-900);font-weight:800}
+
+/* Panneaux (menu, réglages, signalement) */
+#scrim{position:fixed;inset:0;z-index:1250;background:rgba(6,17,43,.65)}
+#panel{position:fixed;left:0;right:0;bottom:0;z-index:1300;max-height:calc(100% - max(40px,var(--sat)));background:var(--navy-900);border-radius:22px 22px 0 0;border-top:1px solid var(--navy-700);display:flex;flex-direction:column;padding-bottom:var(--sab)}
+.phead{display:flex;align-items:center;gap:6px;padding:14px max(12px,var(--sar)) 8px max(12px,var(--sal));flex:none}
+.phead h2{flex:1;margin:0;font-size:22px;font-weight:800;padding-left:6px}
+.phead button{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center}
+#panBody{overflow-y:auto;padding:0 max(16px,var(--sar)) 16px max(16px,var(--sal));flex:1;min-height:0}
+.profile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0 18px;text-align:center}
+.avatar{width:84px;height:84px;border-radius:50%;background:var(--white);color:var(--navy-900);display:grid;place-items:center}
+.avatar svg{width:46px;height:46px}
+.pname{font-size:20px;font-weight:800}
+.psub{font-size:14px;color:var(--ice);max-width:300px}
+.help{font-size:14px;color:var(--ice);line-height:1.5;padding:10px 4px}
+.switch{flex:none;width:52px;height:30px;border-radius:15px;background:var(--navy-700);position:relative;transition:background .2s}
+.switch::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:var(--white);transition:transform .2s}
+[aria-checked=true].switch,[aria-checked=true] .switch{background:var(--blue)}
+[aria-checked=true].switch::after,[aria-checked=true] .switch::after{transform:translateX(22px)}
+.radio{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--navy-700);display:grid;place-items:center}
+[aria-checked=true] .radio{border-color:var(--white);background:var(--white);box-shadow:inset 0 0 0 5px var(--navy-900)}
+input[type=range]{width:100%;accent-color:var(--blue);margin:8px 0}
+.field{width:100%;background:var(--navy-800);border:1px solid var(--navy-700);border-radius:16px;padding:14px 16px;color:var(--white);font:600 17px var(--font)}
+
+.rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;padding:8px 0 10px}
+.rgrid button,.opts .opt{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:14px;font-weight:700;text-align:center;line-height:1.2;position:relative}
+.circ{width:84px;height:84px;border-radius:50%;background:var(--navy-800);display:grid;place-items:center;font-size:40px;line-height:1;border:3px solid transparent}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;padding:8px 0 16px}
+.opt.on .circ{border-color:var(--blue)}
+.opt.on::after{content:"✓";position:absolute;top:-2px;right:calc(50% - 50px);width:26px;height:26px;border-radius:50%;background:var(--blue);color:var(--navy-950);font-weight:800;font-size:15px;display:grid;place-items:center;border:2px solid var(--navy-900)}
+.rc .btns{display:flex;gap:12px;padding-top:6px}
+
+/* Marqueurs */
+.pin{width:36px;height:36px;border-radius:50%;background:var(--navy-800);border:3px solid var(--white);display:grid;place-items:center;font-size:18px;line-height:1;box-shadow:0 3px 10px rgba(6,17,43,.6)}
+.me{position:relative;width:44px;height:44px}
+.me .halo{position:absolute;inset:6px;border-radius:50%;background:rgba(76,134,255,.35);animation:pulse 2s ease-out infinite}
+.me .arrow{position:absolute;inset:2px;width:40px;height:40px;will-change:transform;filter:drop-shadow(0 2px 4px rgba(6,17,43,.7))}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.5);opacity:0}}
+.dest{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--white);border:6px solid var(--navy-900);box-shadow:0 3px 10px rgba(6,17,43,.7)}
+.popbtns{display:flex;gap:8px;margin-top:8px}
+.popbtns button{flex:1;padding:8px 10px;border-radius:10px;font-weight:700;font-size:13px;background:var(--white);color:var(--navy-900)}
+.popbtns button.ghost{background:var(--navy-800);color:var(--white);border:1px solid var(--navy-700)}
+
+/* Animations */
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes slideDown{from{transform:none}to{transform:translateY(100%)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeOut{from{opacity:1}to{opacity:0}}
+@keyframes pageIn{from{opacity:0;transform:translateX(22px)}to{opacity:1;transform:none}}
+@keyframes pageBack{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:none}}
+@keyframes rowIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes sheetUp{from{transform:translateY(34%);opacity:.5}to{transform:none;opacity:1}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,-14px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes pop{0%{transform:scale(.8)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+button,.btn,.lrow,.chip,.circ{transition:transform .14s ease,background-color .18s ease,opacity .18s ease,filter .18s ease}
+button:not(:disabled):active,a.lrow:active{transform:scale(.95)}
+.btn:not(:disabled):active{filter:brightness(.9)}
+button:disabled{opacity:.6}
+#panel:not([hidden]){animation:slideUp .32s cubic-bezier(.2,.85,.25,1)}
+#scrim:not([hidden]){animation:fadeIn .25s ease}
+#panel.out{animation:slideDown .22s ease-in forwards}
+#scrim.out{animation:fadeOut .22s ease forwards}
+#panBody.pi{animation:pageIn .28s cubic-bezier(.2,.85,.25,1)}
+#panBody.pb{animation:pageBack .28s cubic-bezier(.2,.85,.25,1)}
+#toast:not([hidden]){animation:toastIn .28s cubic-bezier(.2,.85,.25,1)}
+#vote:not([hidden]){animation:toastIn .3s cubic-bezier(.2,.85,.25,1)}
+#player:not([hidden]){animation:dropIn .3s cubic-bezier(.2,.85,.25,1)}
+#more .lrow,#panBody .lrow,.badge,.tile{animation:rowIn .34s cubic-bezier(.2,.85,.25,1) both}
+#more .lrow:nth-child(2),#panBody .lrow:nth-child(2),.badge:nth-child(2),.tile:nth-child(2){animation-delay:.04s}
+#more .lrow:nth-child(3),#panBody .lrow:nth-child(3),.badge:nth-child(3),.tile:nth-child(3){animation-delay:.08s}
+#more .lrow:nth-child(4),#panBody .lrow:nth-child(4),.badge:nth-child(4),.tile:nth-child(4){animation-delay:.12s}
+#more .lrow:nth-child(5),#panBody .lrow:nth-child(5),.badge:nth-child(5){animation-delay:.16s}
+#more .lrow:nth-child(n+6),#panBody .lrow:nth-child(n+6),.badge:nth-child(n+6){animation-delay:.2s}
+.circ.pop,.vcard.pop .vem{animation:pop .3s ease}
+
+/* Profil, compte, prouesses */
+.av{flex:none;border-radius:50%;display:grid;place-items:center;line-height:1;border:3px solid var(--white);box-shadow:0 4px 14px rgba(6,17,43,.5)}
+.mhead{display:flex;align-items:center;gap:14px;padding:6px 0 16px}
+.mhead .mt{flex:1;min-width:0}
+.mhead b{display:block;font-size:20px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mhead span{display:block;font-size:14px;color:var(--ice);margin:2px 0 8px}
+.pbar{height:8px;border-radius:4px;background:var(--navy-800);overflow:hidden;width:100%}
+.pbar i{display:block;height:100%;background:var(--blue);border-radius:4px;transition:width .6s ease}
+.warnbadge{flex:none;width:34px;height:34px;border-radius:50%;background:#FF6B6B;color:var(--navy-950);font-weight:800;font-size:18px;display:grid;place-items:center}
+.flabel{display:block;font-size:13px;font-weight:700;color:var(--ice);margin:14px 4px 6px}
+.pwrap{position:relative}
+.pwrap .field{padding-right:96px}
+.pwshow{position:absolute;right:8px;top:0;bottom:0;margin:auto 0;height:36px;padding:0 12px;border-radius:12px;font-size:13px;font-weight:800;color:var(--ice);background:var(--navy-700)}
+.ferr{color:#FFB4B4;font-size:14px;font-weight:600;min-height:22px;padding:10px 4px}
+.btn.danger{background:#FF6B6B;color:var(--navy-950)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--navy-800);border:1px solid var(--navy-700);border-radius:30px;padding:4px;gap:4px;margin-bottom:4px}
+.seg button{padding:11px;border-radius:26px;font-weight:800;font-size:15px;color:var(--ice)}
+.seg button[aria-selected=true]{background:var(--white);color:var(--navy-900)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 0 10px}
+.tile{background:var(--navy-800);border:1px solid var(--navy-700);border-radius:16px;padding:14px}
+.tile b{display:block;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.tile span{font-size:13px;color:var(--ice)}
+.badges{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 8px;padding:8px 0}
+.badge{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:12px;font-weight:700;line-height:1.2}
+.badge .circ{width:68px;height:68px;font-size:32px}
+.badge small{font-size:11px;font-weight:500;color:var(--ice)}
+.badge.lock .circ{filter:grayscale(1);opacity:.35}
+.avgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:10px;padding:6px 0}
+.avgrid button{aspect-ratio:1;border-radius:50%;background:var(--navy-800);font-size:24px;display:grid;place-items:center;border:3px solid transparent}
+.avgrid button[aria-pressed=true]{border-color:var(--white)}
+.msec{font-size:13px;font-weight:700;color:var(--ice);padding:16px 4px 6px}
+/* Choix du véhicule */
+.vcar{position:relative;display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:10px 22% 14px;scrollbar-width:none}
+.vcar::-webkit-scrollbar{display:none}
+.vcard{flex:none;width:100%;scroll-snap-align:center;border:3px solid transparent;border-radius:24px;background:var(--navy-800);padding:20px 8px 16px;display:flex;flex-direction:column;align-items:center;gap:6px;filter:grayscale(1);opacity:.5;transform:scale(.88);transition:transform .3s ease,filter .3s ease,opacity .3s ease,border-color .3s ease}
+.vcard[aria-checked=true]{filter:none;opacity:1;transform:none;border-color:var(--blue)}
+.vem{font-size:84px;line-height:1.1}
+.vname{font-size:20px;font-weight:800}
+.vbubble{position:relative;margin:16px auto 12px;max-width:94%;background:var(--navy-700);border-radius:30px;padding:14px 22px;text-align:center;font-weight:700;font-size:16px;line-height:1.35}
+.vbubble::before{content:"";position:absolute;top:-9px;left:50%;margin-left:-10px;border:10px solid transparent;border-top:0;border-bottom-color:var(--navy-700)}
+.okbar{position:sticky;bottom:0;background:linear-gradient(rgba(10,26,63,0),var(--navy-900) 35%);padding:22px 0 4px;margin-top:6px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.vbar.run{animation-duration:10s!important}}
+/* Étapes du trajet dans le panneau */
+#navSteps{display:none;flex-direction:column;flex:none;max-height:136px;overflow:hidden}
+[data-mode=nav] #navSteps{display:flex}
+#sheet.tall #navSteps{max-height:none;flex:1;min-height:0;overflow-y:auto}
+.nstep{display:flex;align-items:center;gap:14px;padding:10px 2px;border-top:1px solid var(--navy-800);flex:none}
+.nstep .ni{flex:none;width:40px;height:40px;border-radius:12px;background:var(--navy-800);display:grid;place-items:center}
+.nstep .ni svg{width:26px;height:26px}
+.nstep .nt{flex:1;min-width:0;font-weight:700;font-size:15px;line-height:1.3}
+.nstep .nd{flex:none;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ice)}
+/* Lecteur Spotify */
+#player{position:fixed;left:max(12px,var(--sal));right:max(12px,var(--sar));top:calc(max(12px,var(--sat)) + 72px);z-index:1120;display:flex;align-items:center;gap:12px;background:var(--navy-900);border:1px solid var(--navy-700);border-radius:20px;padding:10px 10px 10px 10px;box-shadow:0 10px 28px rgba(6,17,43,.55)}
+[data-mode=nav] #player{top:calc(max(12px,var(--sat)) + 114px)}
+[data-mode=preview] #player{top:calc(max(12px,var(--sat)) + 12px)}
+body.exp #player{display:none}
+#plArt{flex:none;width:52px;height:52px;border-radius:12px;object-fit:cover;background:var(--navy-800)}
+.pltext{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pltext b{font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pltext span{font-size:13px;font-weight:600;color:var(--ice);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plbtns{flex:none;display:flex;align-items:center;gap:2px}
+.plbtns button{width:40px;height:40px;border-radius:50%;display:grid;place-items:center}
+.plbtns #plMore{width:32px;color:var(--ice)}
+#panBody .assoc{text-align:center;padding:18px 4px}
+.associc{width:72px;height:72px;border-radius:50%;background:var(--c);display:grid;place-items:center;font-size:34px;margin:6px auto 14px}
+.assoct{font-size:22px;font-weight:800;margin-bottom:12px}
+#panBody .assoc .help{text-align:center;margin-bottom:18px}
+#player.novid #spWrap{height:0;overflow:hidden;pointer-events:none}
+#spWrap{display:none;flex:0 0 100%;order:9}
+#player.emb{flex-wrap:wrap}
+#player.emb #spWrap{display:block}
+#spWrap iframe{display:block;width:100%;height:152px;border:0;border-radius:14px;background:var(--navy-950)}
+#plNxt{font-size:12px;font-weight:600;color:#8FA6D9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#plNxt:empty{display:none}
+.arow{gap:12px}
+.arow .stbtn{flex:1;min-width:0;text-align:left;display:block;background:none;padding:2px 0}
+.arow .stbtn b{display:block;font-size:17px;font-weight:700;line-height:1.25}
+.arow .stbtn small{display:block;font-size:13px;font-weight:500;color:var(--ice);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rowact{flex:none;padding:10px 16px;border-radius:22px;background:var(--navy-800);border:1px solid var(--navy-700);font-weight:800;font-size:14px;color:var(--ice)}
+.starbtn{flex:none;width:44px;height:44px;border-radius:50%;font-size:24px;color:var(--amber)}
+.sticon{flex:none;width:44px;height:44px;border-radius:12px;object-fit:cover;background:#fff}
+.chipwrap{display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 10px}
+.chipwrap .chip{padding:8px 14px;font-size:14px;border-radius:16px}
+.plbtns #plPlay{background:var(--white);color:var(--navy-900)}
+.field.spin{margin:6px 0}
+.code{display:flex;align-items:center;gap:8px;background:var(--navy-800);border:1px solid var(--navy-700);border-radius:14px;padding:10px 12px;font-size:13px;font-weight:600;word-break:break-all}
+.code span{flex:1;min-width:0}
+.code button{flex:none;padding:8px 12px;border-radius:10px;background:var(--white);color:var(--navy-900);font-weight:800;font-size:13px}
+/* Micro et confirmation d'alerte */
+.search .mic.live{background:var(--white);color:var(--navy-900);animation:micpulse 1s ease-in-out infinite}
+@keyframes micpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+#vote{position:fixed;left:50%;transform:translateX(-50%);top:calc(max(12px,var(--sat)) + 76px);width:min(92vw,400px);z-index:1550;background:var(--white);color:var(--navy-900);border-radius:22px;padding:14px 14px 18px;box-shadow:0 12px 32px rgba(6,17,43,.6);overflow:hidden}
+[data-mode=nav] #vote{top:calc(max(12px,var(--sat)) + 118px)}
+.vtop{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+#vEmoji{flex:none;width:52px;height:52px;border-radius:50%;background:var(--ice);display:grid;place-items:center;font-size:28px}
+#vTitle{font-weight:800;font-size:17px;line-height:1.25}
+.vbtns{display:flex;gap:10px}
+.vbtns button{flex:1;padding:14px 10px;border-radius:30px;font-weight:800;font-size:16px}
+.vbtns .no{background:var(--ice);color:var(--navy-900)}
+.vbtns .yes{background:var(--navy-900);color:var(--white)}
+.vbar{position:absolute;left:0;bottom:0;height:5px;width:100%;background:var(--blue);transform-origin:left}
+.vbar.run{animation:vshrink 10s linear forwards}
+@keyframes vshrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+#netStat{font-weight:800}
+/* Écran d'autorisation de la position */
+#locGate{position:fixed;inset:0;z-index:1600;background:rgba(6,17,43,.9);display:flex;align-items:center;justify-content:center;padding:max(20px,var(--sat)) max(20px,var(--sar)) max(20px,var(--sab)) max(20px,var(--sal))}
+.gbox{width:100%;max-width:380px;background:var(--navy-900);border:1px solid var(--navy-700);border-radius:24px;padding:28px 22px 20px;text-align:center;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(6,17,43,.6)}
+.gicon{width:72px;height:72px;border-radius:50%;background:var(--white);color:var(--navy-900);display:grid;place-items:center;margin:0 auto}
+.gicon svg{width:38px;height:38px}
+.gbox h2{margin:0;font-size:22px;font-weight:800}
+.gbox p{margin:0;font-size:14px;line-height:1.5;color:var(--ice)}
+.gbox ol{margin:0;padding-left:20px;text-align:left;font-size:14px;line-height:1.55;color:var(--ice)}
+.gskip{padding:10px;font-weight:700;font-size:14px;color:var(--ice);text-decoration:underline}
+@media (prefers-reduced-motion:reduce){.me .halo{animation:none}.me .arrow,.switch,.switch::after{transition:none}}
+</style>
+</head>
+<body data-mode="idle" data-map="night">
+<div id="map" aria-label="Carte"></div>
+
+<button class="sq" id="btnMenu" aria-label="Menu">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+</button>
+
+<header id="top">
+  <div id="banner" aria-live="polite">
+    <div class="bicon" id="bIcon"></div>
+    <div class="btext"><div class="bdist" id="bDist">—</div><div class="binstr" id="bInstr">—</div></div>
+  </div>
+</header>
+
+<div id="rightBtns">
+  <button class="rbtn" id="btnMusic" aria-label="Lecteur audio">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M10 16.5V9l5-1.2v7.2"/><circle cx="8.6" cy="16.6" r="1.6"/><circle cx="13.6" cy="15.2" r="1.6"/></svg>
+  </button>
+  <button class="rbtn" id="btnSound" aria-label="Voix et alertes" aria-haspopup="true"></button>
+  <div id="soundPop" role="radiogroup" aria-label="Voix et alertes" hidden>
+    <button role="radio" data-v="all" aria-checked="true">Voix<span>🔊</span></button>
+    <button role="radio" data-v="alerts" aria-checked="false">Alertes seules<span>⚠️</span></button>
+    <button role="radio" data-v="mute" aria-checked="false">Muet<span>🔇</span></button>
+  </div>
+</div>
+
+<div id="toast" role="status" hidden><span class="tdot"></span><span id="toastText"></span></div>
+
+<footer id="sheet">
+  <div id="floats">
+    <div id="speed" aria-label="Vitesse"><b id="spVal">0</b><span>km/h</span></div>
+    <div id="street" hidden></div>
+    <div id="floatR">
+      <button class="fab" id="btnCompass" aria-label="Orientation de la carte" type="button"><svg id="cmpN" width="30" height="30" viewBox="0 0 30 30"><path d="M15 3l5.5 12h-11z" fill="#E5322D"/><path d="M15 27l-5.5-12h11z" fill="#06112B"/><circle cx="15" cy="15" r="2" fill="#fff"/></svg></button>
+      <button class="fab" id="btnLocate" aria-label="Recentrer sur ma position" hidden>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      </button>
+      <button class="reportfab" id="btnReport" aria-label="Signaler">
+        <svg viewBox="0 0 48 48"><path d="M24 5L45 41H3z" fill="#FFC83D" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/><path d="M24 17v16M16 25h16" stroke="#06112B" stroke-width="4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <button id="handle" aria-label="Agrandir ou réduire"></button>
+
+  <div id="idleBlock">
+    <form id="searchForm" class="search" autocomplete="off">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" type="search" placeholder="Où va-t-on ?" enterkeyhint="search" aria-label="Destination">
+      <button class="mic" id="btnMic" type="button" aria-label="Recherche vocale">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7"/></svg>
+      </button>
+    </form>
+    <div id="chips"></div>
+    <div id="more"></div>
+  </div>
+
+  <div id="preview">
+    <div class="ptitle" id="pTitle"></div>
+    <div class="pmeta"><span id="pTime">—</span><small id="pMeta"></small></div>
+    <div class="row">
+      <button class="btn ghost" id="btnCancel">Annuler</button>
+      <button class="btn primary" id="btnStart">Démarrer</button>
+    </div>
+  </div>
+
+  <div id="navbar">
+    <div class="stat"><b id="nTime">—</b><span id="nMeta"></span></div>
+    <button id="btnStop">Arrêter</button>
+  </div>
+  <div id="navSteps" aria-label="Prochaines étapes"></div>
+
+  <div class="credit">Carte © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">contributeurs OpenStreetMap</a> · Itinéraires OSRM</div>
+</footer>
+
+<div id="player" hidden>
+  <img id="plArt" alt="" width="52" height="52">
+  <div class="pltext"><b id="plTitle">Audio</b><span id="plSub">Chargement…</span><span id="plNxt"></span></div>
+  <div class="plbtns">
+    <button id="plPrev" type="button" aria-label="Titre précédent"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z"/></svg></button>
+    <button id="plPlay" type="button" aria-label="Lecture ou pause"></button>
+    <button id="plNext" type="button" aria-label="Titre suivant"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 5H18v14h-2.5zM4 5v14l10.5-7z"/></svg></button>
+    <button id="plMore" type="button" aria-label="Choisir la source audio"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+  </div>
+  <div id="spWrap"></div>
+</div>
+
+<div id="vote" role="alertdialog" aria-labelledby="vTitle" hidden>
+  <div class="vtop"><div id="vEmoji"></div><div id="vTitle"></div></div>
+  <div class="vbtns">
+    <button class="no" id="vNo" type="button">Non, plus là</button>
+    <button class="yes" id="vYes" type="button">Oui, toujours là</button>
+  </div>
+  <div class="vbar" id="vBar"></div>
+</div>
+
+<div id="scrim" hidden></div>
+<section id="panel" role="dialog" aria-modal="true" aria-labelledby="panTitle" hidden>
+  <div class="phead">
+    <button id="panBack" aria-label="Retour"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+    <h2 id="panTitle"></h2>
+    <button id="panClose" aria-label="Fermer"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div id="panBody"></div>
+</section>
+
+<div id="locGate" role="dialog" aria-modal="true" aria-labelledby="gTitle" hidden>
+  <div class="gbox">
+    <div class="gicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/></svg></div>
+    <h2 id="gTitle">Activer votre position</h2>
+    <p id="gText">Cap utilise votre position pour centrer la carte sur vous et calculer l'itinéraire. Elle sert uniquement à ça.</p>
+    <ol id="gSteps" hidden>
+      <li>Touchez l'icône à gauche de l'adresse du site.</li>
+      <li>Ouvrez Autorisations, puis Position.</li>
+      <li>Choisissez Autoriser, puis revenez ici.</li>
+    </ol>
+    <button class="btn primary" id="gBtn" style="flex:none">Activer ma position</button>
+    <button class="gskip" id="gSkip">Continuer sans position</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+'use strict';
+/* Identifiant public de l'application Cap chez Spotify (Client ID). À écrire ici une seule fois par le
+   créateur. Les utilisateurs n'ont ensuite qu'un bouton « Associer » et n'ont jamais de code à saisir. */
+var SPOTIFY_CLIENT_ID='';
+var YOUTUBE_API_KEY='';
+var $=function(s){return document.querySelector(s)};
+var rad=Math.PI/180;
+
+/* ---------- Utilitaires ---------- */
+function load(k,def){try{var v=localStorage.getItem('cap.'+k);return v?JSON.parse(v):def}catch(e){return def}}
+function save(k,v){try{localStorage.setItem('cap.'+k,JSON.stringify(v))}catch(e){}}
+var ACCTS=load('accounts',[]);if(!Array.isArray(ACCTS))ACCTS=[];
+var SESSION=load('session',null);
+if(SESSION&&!ACCTS.some(function(a){return a.id===SESSION}))SESSION=null;
+/* Les données d'un compte sont rangées sous « u.<id>. ». L'invité garde les clés d'origine. */
+function ak(k){return SESSION?('u.'+SESSION+'.'+k):k}
+function loadU(k,def){return load(ak(k),def)}
+function saveU(k,v){save(ak(k),v)}
+function h(tag,props,kids){
+  var e=document.createElement(tag);props=props||{};
+  for(var k in props){var v=props[k];
+    if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k==='html')e.innerHTML=v;
+    else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),v);else e.setAttribute(k,v)}
+  (kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c)});
+  return e;
+}
+var S='fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
+function arrowSvg(angle){return '<svg viewBox="0 0 24 24"><path d="M12 3l7.5 8.5h-4.7V21H9.2v-9.5H4.5z" fill="currentColor" transform="rotate('+angle+' 12 12)"/></svg>'}
+var RING='<svg viewBox="0 0 24 24" '+S+'><circle cx="12" cy="14" r="6"/><path d="M12 8V2.5M9 5l3-3 3 3"/></svg>';
+var FLAG='<svg viewBox="0 0 24 24" '+S+'><path d="M6 21V4"/><path d="M6 5h12l-3 4 3 4H6"/></svg>';
+var PIN='<svg viewBox="0 0 24 24" '+S+'><path d="M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/></svg>';
+var CHEV='<svg width="22" height="22" viewBox="0 0 24 24" '+S+'><path d="M9 5l7 7-7 7"/></svg>';
+var CLOSE_X='<svg width="20" height="20" viewBox="0 0 24 24" '+S+'><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+/* ---------- Géométrie ---------- */
+var R=6371000;
+function hav(a,b){var dLat=(b.lat-a.lat)*rad,dLng=(b.lng-a.lng)*rad;var x=Math.pow(Math.sin(dLat/2),2)+Math.cos(a.lat*rad)*Math.cos(b.lat*rad)*Math.pow(Math.sin(dLng/2),2);return 2*R*Math.asin(Math.sqrt(x))}
+function bearing(a,b){var y=Math.sin((b.lng-a.lng)*rad)*Math.cos(b.lat*rad);var x=Math.cos(a.lat*rad)*Math.sin(b.lat*rad)-Math.sin(a.lat*rad)*Math.cos(b.lat*rad)*Math.cos((b.lng-a.lng)*rad);return (Math.atan2(y,x)/rad+360)%360}
+function distToPath(p,c){
+  var k=Math.cos(p.lat*rad),best=Infinity;
+  for(var i=0;i<c.length-1;i++){
+    var ax=(c[i].lng-p.lng)*k*111320,ay=(c[i].lat-p.lat)*110540;
+    var bx=(c[i+1].lng-p.lng)*k*111320,by=(c[i+1].lat-p.lat)*110540;
+    var dx=bx-ax,dy=by-ay,t=-(ax*dx+ay*dy)/((dx*dx+dy*dy)||1);
+    t=Math.max(0,Math.min(1,t));
+    var d=Math.hypot(ax+t*dx,ay+t*dy);
+    if(d<best)best=d;
+  }
+  return best;
+}
+function angDiff(a,b){var d=Math.abs(a-b)%360;return d>180?360-d:d}
+
+/* ---------- Formats ---------- */
+function roundDist(m){return m<100?Math.max(10,Math.round(m/10)*10):Math.round(m/50)*50}
+function fmtDist(m){if(m<1000)return roundDist(m)+' m';return (m/1000).toFixed(m<10000?1:0).replace('.',',')+' km'}
+function speakDist(m){if(m<1000)return roundDist(m)+' mètres';var k=(m/1000).toFixed(1).replace('.',',').replace(',0','');return k+(k==='1'?' kilomètre':' kilomètres')}
+function fmtTime(s){var m=Math.max(1,Math.round(s/60));if(m<60)return m+' min';var hh=Math.floor(m/60);return hh+' h '+String(m%60).padStart(2,'0')}
+function eta(s){return new Date(Date.now()+s*1000).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})}
+function lcfirst(t){return t.charAt(0).toLowerCase()+t.slice(1)}
+function fmtAgo(ms){var m=Math.round(ms/60000);if(m<1)return 'quelques secondes';if(m<60)return m+' min';var hr=Math.round(m/60);if(hr<48)return hr+' h';return Math.round(hr/24)+' jours'}
+
+/* ---------- État et réglages ---------- */
+var state={pos:null,heading:null,speed:null,acc:null,follow:true,mode:'idle',dest:null,route:null,
+  stepIdx:0,announced:{},voice:loadU('voice','all'),offCount:0,lastReroute:0,rerouting:false,arrived:false,
+  alerts:load('alerts',[]),spoken:{},exp:false,saveAs:null,moreMode:'options',results:[],resMsg:'',
+  places:loadU('places',{home:null,work:null,list:[]}),recent:loadU('recent',[]),lastFix:null};
+state.set=Object.assign({vol:1,mapMode:'auto',mapOrient:'heading',showVideo:true,showPlayer:true,showNext:true,audioSrc:null,radioFavs:[],radioLast:null,showAlerts:true,vibrate:true,autoReroute:true,keepAwake:true,alertOff:{},group:''},loadU('set',{}));
+function saveSet(){saveU('set',state.set)}
+function setMode(m){
+  state.mode=m;document.body.dataset.mode=m;
+  if(m!=='idle'&&state.exp)setExp(false);
+  if(typeof SH!=='undefined'&&SH){SH.state=(m==='nav')?'small':'medium';sheetApply()}
+}
+/* Fond de carte : clair de jour, sombre la nuit (selon le soleil à votre position), ou choix manuel */
+function sunElev(lat,lng,d){
+  var n=d.getTime()/86400000+2440587.5-2451545.0;
+  var L=(280.460+0.9856474*n)%360,g=((357.528+0.9856003*n)%360)*rad;
+  var lam=(L+1.915*Math.sin(g)+0.020*Math.sin(2*g))*rad,eps=(23.439-0.0000004*n)*rad;
+  var dec=Math.asin(Math.sin(eps)*Math.sin(lam)),ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam));
+  var gmst=(18.697374558+24.06570982441908*n)%24,lst=(((gmst*15+lng)%360+360)%360)*rad,ha=lst-ra,ph=lat*rad;
+  return Math.asin(Math.sin(ph)*Math.sin(dec)+Math.cos(ph)*Math.cos(dec)*Math.cos(ha))/rad;
+}
+function isDayNow(){
+  var p=state.pos||{lat:50.85,lng:4.35};
+  return sunElev(p.lat,p.lng,new Date())>-1.5;
+}
+function mapStyleNow(){var m=state.set.mapMode;return m==='day'||m==='night'?m:(isDayNow()?'day':'night')}
+function applyMap(){document.body.dataset.map=mapStyleNow()}
+applyMap();
+setInterval(applyMap,60000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)applyMap()});
+
+/* ---------- Profil ---------- */
+var PROF=Object.assign({name:'',avatar:'😀',color:'#4C86FF',vehicle:'car',fuel:'Super 95',avoidTolls:false,avoidHighways:false,avoidFerries:false,
+  pass:false,carpool:false,showName:false,since:Date.now(),stats:{m:0,trips:0,reports:0,confirms:0},badges:{}},loadU('profile',{}));
+PROF.stats=Object.assign({m:0,trips:0,reports:0,confirms:0},PROF.stats||{});
+if(!PROF.badges)PROF.badges={};
+var statDirty=false;
+function saveProf(){saveU('profile',PROF)}
+function dispName(){return PROF.name||(SESSION?'Conducteur':'Conducteur invité')}
+var LEVELS=[[0,'Nouveau'],[50,'Éclaireur'],[200,'Navigateur'],[600,'Expert'],[1500,'Légende']];
+function pts(){var t=PROF.stats;return t.reports*10+t.confirms*2+t.trips*5+Math.floor(t.m/1000)}
+function levelInfo(){var p=pts(),i=0;for(var k=0;k<LEVELS.length;k++)if(p>=LEVELS[k][0])i=k;var nx=LEVELS[i+1];return {name:LEVELS[i][1],p:p,from:LEVELS[i][0],next:nx?nx[0]:null}}
+function fmtKm(m){return (m/1000).toFixed(m<10000?1:0).replace('.',',')+' km'}
+var BADGES=[
+  ['trip','🧭','Premier trajet','Lancez un guidage',function(t){return t.trips>=1}],
+  ['km100','🛣️','100 km','Roulez 100 km',function(t){return t.m>=1e5}],
+  ['km1000','🚀','1 000 km','Roulez 1 000 km',function(t){return t.m>=1e6}],
+  ['rep1','📣','Premier signalement','Signalez un événement',function(t){return t.reports>=1}],
+  ['rep10','🏅','10 signalements','Signalez 10 événements',function(t){return t.reports>=10}],
+  ['con25','✅','25 confirmations','Confirmez 25 alertes',function(t){return t.confirms>=25}],
+  ['home','🏠','Chez soi','Enregistrez votre domicile',function(){return !!state.places.home}],
+  ['acct','🔐','Compte créé','Créez un compte',function(){return !!SESSION}]
+];
+function checkBadges(){
+  var got=[];
+  BADGES.forEach(function(b){if(!PROF.badges[b[0]]&&b[4](PROF.stats)){PROF.badges[b[0]]=Date.now();got.push(b)}});
+  if(got.length){saveProf();toast('🏆 Nouvelle prouesse : '+got[0][2],5000)}
+}
+setInterval(function(){if(statDirty){statDirty=false;saveProf();checkBadges()}},15000);
+window.addEventListener('pagehide',function(){if(statDirty){statDirty=false;saveProf()}});
+
+
+/* ---------- Types d'alertes ---------- */
+var TYPES={
+  traffic:{label:'Embouteillage',noun:'un embouteillage',emoji:'🚗',ttl:36e5,alert:true,subs:[['Embouteillage','🚗','embouteillage'],['Important','🚙','gros embouteillage'],['À l\'arrêt','🛑','circulation à l\'arrêt']]},
+  police:{label:'Police',noun:'un contrôle de police',emoji:'👮',ttl:2*36e5,alert:true,subs:[['Police','👮','contrôle de police'],['Radar mobile','📸','radar mobile'],['Cachée','🕵️','police cachée'],['Sens inverse','↔️','police en sens inverse']]},
+  accident:{label:'Accident',noun:'un accident',emoji:'💥',ttl:3*36e5,alert:true,subs:[['Accident','💥','accident'],['Mineur','🚗','accident mineur'],['Grave','🚑','accident grave']]},
+  hazard:{label:'Danger',noun:'un danger',emoji:'⚠️',ttl:6*36e5,alert:true,subs:[['Nid de poule','🕳️','nid de poule'],['Objet sur la route','📦','objet sur la route'],['Véhicule en panne','🚙','véhicule en panne'],['Route glissante','🧊','route glissante'],['Feux en panne','🚦','feux de signalisation en panne']]},
+  closed:{label:'Route fermée',noun:'une route fermée',emoji:'🚧',ttl:12*36e5,alert:true},
+  blocked:{label:'Voie bloquée',noun:'une voie bloquée',emoji:'⛔',ttl:3*36e5,alert:true},
+  mapfix:{label:'Problème carte',noun:'un problème de carte',emoji:'🗺️',ttl:30*864e5,alert:false,subs:[['Rue manquante','🗺️'],['Sens interdit','⛔'],['Mauvais nom','✏️'],['Autre','❓']]},
+  weather:{label:'Mauvais temps',noun:'du mauvais temps',emoji:'⛈️',ttl:3*36e5,alert:true,subs:[['Pluie','🌧️','forte pluie'],['Brouillard','🌫️','brouillard'],['Verglas','🧊','verglas'],['Neige','❄️','neige'],['Vent fort','💨','vent fort']]},
+  fuel:{label:'Prix du carburant',noun:'un prix du carburant',emoji:'⛽',ttl:3*864e5,alert:false,subs:[['Essence','⛽'],['Diesel','🛢️'],['GPL','🔥']]},
+  animal:{label:'Animal',noun:'un animal',emoji:'🐄',ttl:2*36e5,alert:true},
+  help:{label:'Assistance sur la route',noun:'une assistance sur la route',emoji:'🆘',ttl:3*36e5,alert:true},
+  place:{label:'Lieu',noun:'un lieu',emoji:'📍',ttl:30*864e5,alert:false}
+};
+function subDef(a){var T=TYPES[a.type];if(!T||!T.subs||!a.sub)return null;return T.subs.find(function(s){return s[0]===a.sub})||null}
+function alertEmoji(a){var s=subDef(a);return s?s[1]:TYPES[a.type].emoji}
+function alertName(a){var s=subDef(a);return s&&s[2]?s[2]:lcfirst(a.sub||TYPES[a.type].label)}
+function ttlFor(a){return a.sub==='Nid de poule'?7*864e5:TYPES[a.type].ttl}
+
+/* ---------- Carte ---------- */
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([50.8503,4.3517],14);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var meMarker=null,accCircle=null,routeLayer=L.layerGroup().addTo(map),alertLayer=L.layerGroup(),destMarker=null;
+if(state.set.showAlerts)alertLayer.addTo(map);
+map.on('dragstart',function(){state.follow=false;$('#btnLocate').hidden=false});
+map.on('click',function(){if(state.exp)setExp(false);closeSoundPop()});
+map.on('contextmenu',function(e){var ll=evLatLng(e);setDestination({lat:ll.lat,lng:ll.lng,name:'Point sélectionné sur la carte'})});
+$('#btnLocate').addEventListener('click',function(){
+  state.follow=true;$('#btnLocate').hidden=true;
+  if(state.pos){camAnim(800);map.setView(state.pos,state.mode==='nav'?17:16,{animate:true})}
+});
+var ME_HTML='<div class="me"><div class="halo"></div><svg class="arrow" viewBox="0 0 40 40"><path d="M20 4L33 34 20 27 7 34z" fill="#4C86FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg></div>';
+function drawMe(){
+  var p=state.pos;if(!p)return;
+  if(!meMarker){
+    meMarker=L.marker(p,{icon:L.divIcon({className:'',html:ME_HTML,iconSize:[44,44],iconAnchor:[22,22]}),zIndexOffset:1000,interactive:false}).addTo(map);
+    accCircle=L.circle(p,{radius:20,stroke:false,fillColor:'#4C86FF',fillOpacity:.12,interactive:false}).addTo(map);
+  }
+  if(!MOV.disp){meMarker.setLatLng(p);accCircle.setLatLng(p)}
+  accCircle.setRadius(Math.min(state.acc||20,150));
+  if(!MOV.arrow)MOV.arrow=meMarker.getElement().querySelector('.arrow');
+}
+/* Mouvement fluide : la position affichée glisse entre deux mesures GPS (estimation d'après la vitesse et le cap),
+   la carte suit en continu avec la flèche dans le bas de l'écran, et le compteur monte ou descend en direct. */
+var MOV={rotA:0,big:false,drag:true,fix:null,t:0,fixT:0,v:0,hdT:null,disp:null,err:null,errT:0,hd:0,spd:0,spdT:0,shown:-1,last:0,animUntil:0,arrow:null};
+function movFix(p,kmh,hd){
+  var now=performance.now();
+  MOV.err=MOV.disp?{lat:MOV.disp.lat-p.lat,lng:MOV.disp.lng-p.lng}:null;MOV.errT=now;
+  MOV.fix={lat:p.lat,lng:p.lng};MOV.t=now;MOV.fixT=now;MOV.v=kmh/3.6;MOV.hdT=hd;MOV.spdT=kmh;
+  if(!MOV.disp){MOV.disp={lat:p.lat,lng:p.lng};MOV.hd=hd||0;MOV.spd=kmh}
+}
+/* Carte tournée selon la direction : l'élément carte est agrandi autour de la flèche puis pivoté. */
+function setRotLayout(on){
+  var el=$('#map'),W=innerWidth,H=innerHeight;
+  MOV.big=on;
+  if(on){
+    var px=W/2,py=H*0.58,R=Math.ceil(Math.sqrt(Math.pow(Math.max(px,W-px),2)+Math.pow(Math.max(py,H-py),2)))+4;
+    el.classList.add('rot');el.style.left=(px-R)+'px';el.style.top=(py-R)+'px';el.style.width=(2*R)+'px';el.style.height=(2*R)+'px';
+  }else{
+    el.classList.remove('rot');el.style.left=el.style.top=el.style.width=el.style.height=el.style.transform='';
+  }
+  try{map.invalidateSize({animate:false})}catch(e){}
+}
+function evLatLng(e){
+  var oe=e.originalEvent;
+  if(!MOV.big||!oe||oe.clientX==null)return e.latlng;
+  var el=$('#map'),r=el.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,a=MOV.rotA*Math.PI/180;
+  var dx=oe.clientX-cx,dy=oe.clientY-cy;
+  var x=dx*Math.cos(a)-dy*Math.sin(a),y=dx*Math.sin(a)+dy*Math.cos(a),sz=map.getSize();
+  return map.containerPointToLatLng(L.point(sz.x/2+x,sz.y/2+y));
+}
+$('#btnCompass').addEventListener('click',function(){
+  var h=state.set.mapOrient==='heading';
+  state.set.mapOrient=h?'north':'heading';saveSet();
+  if(!h&&state.pos){state.follow=true;$('#btnLocate').hidden=true}
+  toast(h?'Nord en haut':'Carte orientée selon votre direction',2200);
+});
+function camAnim(ms){MOV.animUntil=performance.now()+(ms||700)}
+function movFrame(ts){
+  requestAnimationFrame(movFrame);
+  var F=MOV.fix;if(!F||document.hidden)return;
+  var dtm=ts-MOV.last;if(dtm<14)return;if(dtm>250)dtm=250;MOV.last=ts;
+  var dt=Math.min((ts-MOV.t)/1000,2.2),lat=F.lat,lng=F.lng;
+  if(MOV.v>0.8&&MOV.hdT!=null){
+    var r=MOV.hdT*Math.PI/180,m=MOV.v*dt;
+    lat+=m*Math.cos(r)/111320;lng+=m*Math.sin(r)/(111320*Math.cos(F.lat*Math.PI/180));
+  }
+  if(MOV.err){var k=Math.max(0,1-(ts-MOV.errT)/800);lat+=MOV.err.lat*k;lng+=MOV.err.lng*k}
+  MOV.disp={lat:lat,lng:lng};
+  if(meMarker){meMarker.setLatLng(MOV.disp);accCircle.setLatLng(MOV.disp)}
+  if(MOV.arrow&&state.heading!=null){
+    var df=((state.heading-MOV.hd+540)%360)-180;
+    MOV.hd+=df*(1-Math.exp(-dtm/160));
+    MOV.arrow.style.transform='rotate('+MOV.hd.toFixed(1)+'deg)';
+  }
+  var tg=(ts-MOV.fixT>8000)?0:MOV.spdT;
+  MOV.spd+=(tg-MOV.spd)*(1-Math.exp(-dtm/300));
+  if(Math.abs(tg-MOV.spd)<.5)MOV.spd=tg;
+  var sh=Math.round(MOV.spd);
+  if(sh!==MOV.shown){MOV.shown=sh;$('#spVal').textContent=sh}
+  var want=state.follow&&state.set.mapOrient==='heading'&&!!state.pos;
+  var tgA=want?MOV.hd:0,dA=((tgA-MOV.rotA+540)%360)-180;
+  MOV.rotA=Math.abs(dA)<.3?tgA:MOV.rotA+dA*(1-Math.exp(-dtm/220));
+  var needBig=want||MOV.rotA!==0;
+  if(needBig!==MOV.big)setRotLayout(needBig);
+  if(MOV.big){
+    var me=$('#map');me.style.transform='rotate('+(-MOV.rotA).toFixed(2)+'deg)';me.style.setProperty('--ur',MOV.rotA.toFixed(2)+'deg');
+  }
+  $('#cmpN').style.transform='rotate('+(-MOV.rotA).toFixed(1)+'deg)';
+  if(want===MOV.drag){MOV.drag=!want;try{if(want){map.dragging.disable();map.doubleClickZoom.disable()}else{map.dragging.enable();map.doubleClickZoom.enable()}}catch(e){}}
+  if(state.follow&&ts>MOV.animUntil&&state.pos){
+    var sz=map.getSize(),P=map.latLngToContainerPoint(MOV.disp),d=P.subtract(MOV.big?L.point(sz.x/2,sz.y/2):L.point(sz.x/2,sz.y*0.58));
+    if(Math.abs(d.x)>=.5||Math.abs(d.y)>=.5)map.panBy(d,{animate:false});
+  }
+}
+requestAnimationFrame(movFrame);
+
+/* ---------- Voix ---------- */
+var voiceFr=null,synth=window.speechSynthesis;
+function pickVoice(){if(!synth)return;var v=synth.getVoices();voiceFr=v.find(function(x){return /^fr[-_](FR|BE)/i.test(x.lang)})||v.find(function(x){return /^fr/i.test(x.lang)})||null}
+if(synth){pickVoice();synth.onvoiceschanged=pickVoice}
+function say(text,opt){
+  opt=opt||{};var kind=opt.kind||'nav';
+  if(state.voice==='mute')return;
+  if(state.voice==='alerts'&&kind!=='alert')return;
+  if(!synth)return;
+  if(opt.interrupt)synth.cancel();
+  var u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';if(voiceFr)u.voice=voiceFr;u.rate=1.03;u.volume=state.set.vol;
+  if(typeof RAD!=='undefined'&&RAD&&!RAD.au.paused){RAD.au.volume=.25;u.onend=u.onerror=function(){RAD.au.volume=1}}
+  synth.speak(u);
+}
+function unlockSpeech(){if(!synth)return;try{var u=new SpeechSynthesisUtterance(' ');u.volume=0;synth.speak(u)}catch(e){}}
+var SND_ICON={
+  all:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>',
+  alerts:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L22 20H2z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>',
+  mute:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>'
+};
+function setVoice(v){
+  state.voice=v;saveU('voice',v);renderVoice();
+  if(v==='mute'&&synth)synth.cancel();
+  if(v==='all'){unlockSpeech();say('Guidage vocal activé',{interrupt:true})}
+  if(v==='alerts'){unlockSpeech();say('Seules les alertes seront annoncées',{kind:'alert',interrupt:true})}
+}
+function renderVoice(){
+  $('#btnSound').innerHTML=SND_ICON[state.voice];
+  document.querySelectorAll('#soundPop button').forEach(function(b){b.setAttribute('aria-checked',String(b.dataset.v===state.voice))});
+}
+function closeSoundPop(){$('#soundPop').hidden=true}
+$('#btnSound').addEventListener('click',function(e){e.stopPropagation();$('#soundPop').hidden=!$('#soundPop').hidden});
+document.querySelectorAll('#soundPop button').forEach(function(b){b.addEventListener('click',function(){setVoice(b.dataset.v);closeSoundPop()})});
+document.addEventListener('click',function(e){if(!e.target.closest('#soundPop')&&!e.target.closest('#btnSound'))closeSoundPop()});
+renderVoice();
+
+/* ---------- Toast ---------- */
+var toastTimer=null;
+function toast(msg,ms){
+  $('#toastText').textContent=msg;$('#toast').hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(function(){$('#toast').hidden=true},ms||5000);
+}
+
+/* ---------- Géolocalisation ---------- */
+function onPos(e){
+  var c=e.coords,p={lat:c.latitude,lng:c.longitude},hd=state.heading,now=Date.now();
+  var kmh=0;
+  if(c.speed!=null&&!isNaN(c.speed))kmh=c.speed*3.6;
+  else if(state.lastFix){var dt=(now-state.lastFix.t)/1000;if(dt>.5)kmh=hav(state.lastFix,p)/dt*3.6}
+  if(kmh<2)kmh=0;
+  if(state.lastFix&&c.accuracy<60&&kmh>5){var dd=hav(state.lastFix,p);if(dd>3&&dd<600){PROF.stats.m+=dd;statDirty=true}}
+  if(c.heading!=null&&!isNaN(c.heading)&&(c.speed==null||c.speed>1))hd=c.heading;
+  else if(state.pos&&hav(state.pos,p)>8)hd=bearing(state.pos,p);
+  var first=!state.pos;
+  state.speed=c.speed;state.acc=c.accuracy;state.heading=hd;state.pos=p;state.lastFix={lat:p.lat,lng:p.lng,t:now};
+  movFix(p,kmh,hd);
+  drawMe();
+  if(first){map.setView(p,16,{animate:false});applyMap()}
+  checkAlerts();updateStreet();netConnect();
+  if(state.mode==='nav')navTick();
+}
+var geoId=null,gateSkipped=false;
+function showGate(kind){
+  if(state.pos||gateSkipped)return;
+  var g=$('#locGate'),btn=$('#gBtn'),steps=$('#gSteps'),title=$('#gTitle'),text=$('#gText');
+  g.hidden=false;steps.hidden=true;btn.hidden=false;btn.disabled=false;
+  if(kind==='denied'){
+    title.textContent='Position bloquée';
+    text.textContent='La localisation est refusée pour ce site. Autorisez-la dans les réglages du navigateur :';
+    steps.hidden=false;btn.textContent='Réessayer';
+  }else if(kind==='unsupported'){
+    title.textContent='Position indisponible';
+    text.textContent='Ce navigateur ne permet pas de récupérer votre position.';btn.hidden=true;
+  }else if(kind==='wait'){
+    title.textContent='Recherche en cours';
+    text.textContent='Acceptez la demande qui s\'affiche. Si rien n\'apparaît, sortez au grand air quelques secondes.';
+    btn.textContent='Recherche de votre position…';btn.disabled=true;
+  }else{
+    title.textContent='Activer votre position';
+    text.textContent='Cap utilise votre position pour centrer la carte sur vous et calculer l\'itinéraire. Elle sert uniquement à ça.';
+    btn.textContent='Activer ma position';
+  }
+}
+function hideGate(){$('#locGate').hidden=true}
+function startGeo(){
+  if(!('geolocation' in navigator)){showGate('unsupported');return}
+  if(geoId!==null)return;
+  showGate('wait');
+  geoId=navigator.geolocation.watchPosition(function(e){hideGate();onPos(e)},onGeoErr,{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+}
+function onGeoErr(err){
+  if(err.code===1){
+    if(geoId!==null){navigator.geolocation.clearWatch(geoId);geoId=null}
+    showGate('denied');
+  }else if(!state.pos)showGate('ask');
+  else toast('Position introuvable pour le moment. Nouvel essai en cours.',4000);
+}
+$('#gBtn').addEventListener('click',startGeo);
+$('#gSkip').addEventListener('click',function(){gateSkipped=true;hideGate();toast('Sans position, la carte reste fixe. Vous pouvez la déplacer.',5000)});
+(function initGeo(){
+  if(navigator.permissions&&navigator.permissions.query){
+    navigator.permissions.query({name:'geolocation'}).then(function(st){
+      if(st.state==='granted')startGeo();
+      else if(st.state==='denied')showGate('denied');
+      else showGate('ask');
+      st.onchange=function(){if(st.state==='granted')startGeo()};
+    }).catch(function(){showGate('ask')});
+  }else showGate('ask');
+})();
+
+/* ---------- Nom de la rue ---------- */
+var rs={t:0,p:null,busy:false};
+async function updateStreet(){
+  var p=state.pos,now=Date.now();
+  if(!p||rs.busy||now-rs.t<4000)return;
+  if(rs.p&&hav(rs.p,p)<40&&now-rs.t<30000)return;
+  rs.busy=true;rs.t=now;rs.p={lat:p.lat,lng:p.lng};
+  try{
+    var r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=fr&lat='+p.lat+'&lon='+p.lng);
+    var j=await r.json(),a=j.address||{};
+    var n=a.road||a.pedestrian||a.footway||a.path||a.cycleway||j.name||'';
+    if(n){var el=$('#street');el.textContent=n;el.hidden=false}
+  }catch(e){}
+  rs.busy=false;
+}
+
+/* ---------- Panneau de recherche ---------- */
+/* Panneau du bas : trois hauteurs (petit, moyen, grand), déplaçables au doigt */
+var SH={state:'medium',m:null,drag:null};
+function setExp(on){
+  state.exp=on;$('#sheet').classList.toggle('exp',on);document.body.classList.toggle('exp',on);
+  if(on)renderMore();
+  else{state.saveAs=null;$('#q').placeholder='Où va-t-on ?';$('#q').blur();state.moreMode='options'}
+  SH.state=on?'large':'medium';sheetApply();
+}
+function sheetMetrics(){
+  var sh=$('#sheet'),cs=getComputedStyle(sh),pb=parseFloat(cs.paddingBottom)||0;
+  var hadE=sh.classList.contains('exp'),hadT=sh.classList.contains('tall');
+  sh.classList.remove('exp','tall');
+  var top=sh.getBoundingClientRect().top;
+  var kids=Array.prototype.filter.call(sh.children,function(c){return c.id!=='floats'&&c.offsetParent!==null&&c.offsetHeight>0});
+  var last=kids[kids.length-1],first=state.mode==='nav'?$('#navbar'):$('#searchForm');
+  var med=last?last.getBoundingClientRect().bottom-top+pb:200;
+  var sm=first&&first.offsetParent!==null?first.getBoundingClientRect().bottom-top+pb+2:med;
+  var full=sh.offsetHeight;
+  if(hadE)sh.classList.add('exp');if(hadT)sh.classList.add('tall');
+  med=Math.min(med,full);sm=Math.min(sm,med-10);
+  return {s:sm,m:med,l:full};
+}
+function sheetApply(instant){
+  var sh=$('#sheet'),m=sheetMetrics(),st=state.mode==='preview'?'medium':SH.state;
+  SH.m=m;
+  var vis=st==='small'?m.s:st==='large'?m.l:m.m;
+  if(instant)sh.classList.add('noanim');
+  sh.style.transform='translateY('+Math.max(0,m.l-vis)+'px)';
+  sh.classList.toggle('tall',st==='large'&&state.mode==='nav');
+  if(instant)requestAnimationFrame(function(){requestAnimationFrame(function(){sh.classList.remove('noanim')})});
+}
+function commitSheet(st){
+  if(state.mode==='idle'){
+    if(st==='large'){if(!state.exp)setExp(true);else sheetApply()}
+    else{if(state.exp)setExp(false);SH.state=st;sheetApply()}
+  }else{SH.state=st;sheetApply()}
+}
+function cycleSheet(){commitSheet(SH.state==='medium'?'large':'medium')}
+(function(){
+  var hd=$('#handle'),sh=$('#sheet');
+  hd.addEventListener('pointerdown',function(e){
+    if(state.mode==='preview')return;
+    var m=sheetMetrics(),cur=document.documentElement.clientHeight-sh.getBoundingClientRect().top;
+    SH.drag={y:e.clientY,h:cur,m:m,moved:false,cur:cur,s:[{y:e.clientY,t:e.timeStamp}]};
+    try{hd.setPointerCapture(e.pointerId)}catch(x){}
+  });
+  hd.addEventListener('pointermove',function(e){
+    var d=SH.drag;if(!d)return;
+    var dy=d.y-e.clientY;
+    if(!d.moved&&Math.abs(dy)<6)return;
+    if(!d.moved){d.moved=true;sh.classList.add('dragging')}
+    var m=d.m,cur=Math.max(m.s-36,Math.min(m.l,d.h+dy));
+    d.cur=cur;sh.style.transform='translateY('+(m.l-cur)+'px)';
+    d.s.push({y:e.clientY,t:e.timeStamp});while(d.s.length>1&&e.timeStamp-d.s[0].t>120)d.s.shift();
+    var tall=cur>m.m+24,has=sh.classList.contains('tall');
+    if(tall&&!has){sh.classList.add('tall');if(state.mode==='idle')renderMore()}
+    else if(!tall&&has)sh.classList.remove('tall');
+  });
+  function end(){
+    var d=SH.drag;if(!d)return;SH.drag=null;sh.classList.remove('dragging');
+    if(!d.moved){cycleSheet();return}
+    var m=d.m,cur=d.cur,hs={small:m.s,medium:m.m,large:m.l},names=['small','medium','large'];
+    var a=d.s[0],b=d.s[d.s.length-1],v=b.t>a.t?(a.y-b.y)/(b.t-a.t):0;
+    var best=names[0];names.forEach(function(n){if(Math.abs(hs[n]-cur)<Math.abs(hs[best]-cur))best=n});
+    if(v>0.5){var up=names.filter(function(n){return hs[n]>cur+8});best=up.length?up[0]:'large'}
+    else if(v<-0.5){var dn=names.filter(function(n){return hs[n]<cur-8});best=dn.length?dn[dn.length-1]:'small'}
+    commitSheet(best);
+  }
+  hd.addEventListener('pointerup',end);hd.addEventListener('pointercancel',end);
+  hd.addEventListener('click',function(e){if(e.detail===0)cycleSheet()});
+})();
+(function(){
+  var sy=null,sx=null,ss=0,ib=$('#idleBlock');
+  ib.addEventListener('touchstart',function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;ss=$('#more').scrollTop},{passive:true});
+  ib.addEventListener('touchend',function(e){
+    if(sy==null)return;var t=e.changedTouches[0],dy=t.clientY-sy,dx=t.clientX-sx;sy=null;
+    if(Math.abs(dy)<50||Math.abs(dy)<Math.abs(dx)*1.5)return;
+    if(dy<0&&!state.exp)setExp(true);
+    else if(dy>0&&state.exp&&ss<=0&&$('#more').scrollTop<=0)setExp(false);
+  });
+})();
+$('#q').addEventListener('focus',function(){if(!state.exp)setExp(true)});
+$('#q').addEventListener('input',function(){if(!this.value){state.moreMode='options';renderMore()}});
+$('#searchForm').addEventListener('submit',function(ev){
+  ev.preventDefault();var q=$('#q').value.trim();if(!q)return;search(q);
+});
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+var rec=null;
+$('#btnMic').addEventListener('click',function(){
+  var btn=$('#btnMic');
+  if(!SR){toast('La dictée vocale n\'est pas disponible ici. Ouvrez Cap dans Chrome ou utilisez le micro du clavier.',7000);setExp(true);$('#q').focus();return}
+  if(rec){try{rec.stop()}catch(e){}return}
+  if(synth)synth.cancel();
+  setExp(true);
+  var heard=false;
+  try{
+    rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+    rec.onstart=function(){btn.classList.add('live');toast('Je vous écoute… Dites une adresse.',4000)};
+    rec.onresult=function(e){
+      var t='',fin=false;
+      for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;if(e.results[i].isFinal)fin=true}
+      $('#q').value=t;heard=true;
+      if(fin)search(t.trim());
+    };
+    rec.onerror=function(e){
+      var m={'not-allowed':'Micro bloqué. Touchez l\'icône à gauche de l\'adresse du site, puis Autorisations, puis Micro.',
+        'service-not-allowed':'Micro bloqué. Touchez l\'icône à gauche de l\'adresse du site, puis Autorisations, puis Micro.',
+        'no-speech':'Je n\'ai rien entendu. Réessayez.','audio-capture':'Aucun micro détecté.',
+        'network':'La dictée vocale a besoin d\'une connexion internet.','aborted':''};
+      var msg=m[e.error];if(msg===undefined)msg='Dictée vocale indisponible ('+e.error+').';
+      if(msg)toast(msg,6000);
+    };
+    rec.onend=function(){btn.classList.remove('live');rec=null;if(!heard){}};
+    rec.start();
+  }catch(err){btn.classList.remove('live');rec=null;toast('Impossible de démarrer le micro.',4000)}
+});
+function rowBtn(emoji,color,title,sub,onclick,right){
+  return h('button',{class:'lrow',type:'button',onclick:onclick},[
+    h('span',{class:'ic',style:'--c:'+color,text:emoji}),
+    h('span',{class:'lt'},[h('b',{text:title}),sub?h('small',{text:sub}):null]),
+    right||null
+  ]);
+}
+function chevron(){return h('span',{class:'chev',html:CHEV})}
+function renderMore(){
+  var m=$('#more');m.innerHTML='';
+  if(state.moreMode==='results'){
+    if(state.resMsg)m.appendChild(h('div',{class:'none',text:state.resMsg}));
+    state.results.forEach(function(it){
+      var parts=it.display_name.split(',');
+      m.appendChild(rowBtn('📍','#1A3678',parts[0],parts.slice(1,4).join(',').trim(),function(){
+        onPick({lat:parseFloat(it.lat),lng:parseFloat(it.lon),name:it.display_name});
+      }));
+    });
+    return;
+  }
+  if(state.saveAs){m.appendChild(h('div',{class:'none',text:'Tapez une adresse puis validez pour l\'enregistrer.'}));return}
+  m.appendChild(h('div',{class:'mlabel',text:'Plus d\'options'}));
+  state.recent.forEach(function(r){
+    m.appendChild(rowBtn('🕘','#1A3678',r.name.split(',')[0],'Destination récente',function(){setExp(false);setDestination(r)}));
+  });
+  m.appendChild(rowBtn('📡','#1E8FA8','Partager ma position','Envoyer ma position à un proche',sharePos));
+}
+async function search(q){
+  state.moreMode='results';state.results=[];state.resMsg='Recherche…';setExp(true);state.moreMode='results';renderMore();
+  var u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=fr&q='+encodeURIComponent(q);
+  var c=state.pos||map.getCenter();
+  u+='&viewbox='+(c.lng-.6)+','+(c.lat+.6)+','+(c.lng+.6)+','+(c.lat-.6);
+  try{
+    var r=await fetch(u);var j=await r.json();
+    state.results=j;state.resMsg=j.length?'':'Aucun résultat. Essayez avec la ville ou le code postal.';
+  }catch(e){state.resMsg='Recherche impossible. Vérifiez votre connexion.'}
+  renderMore();
+}
+function onPick(pl){
+  if(state.saveAs){savePlace(pl);return}
+  setExp(false);$('#q').value=pl.name.split(',')[0];setDestination(pl);
+}
+
+/* ---------- Lieux enregistrés ---------- */
+function savePlaces(){saveU('places',state.places)}
+function renderChips(){
+  var c=$('#chips');c.innerHTML='';
+  function chip(emoji,label,pl,kind,cls){
+    c.appendChild(h('button',{class:'chip '+(cls||''),type:'button',onclick:function(){
+      if(pl){setDestination(pl)}else startSaveMode(kind);
+    }},[h('span',{class:'em',text:emoji}),label]));
+  }
+  chip('🏠','Domicile',state.places.home,'home',state.places.home?'':'unset');
+  chip('💼','Travail',state.places.work,'work',state.places.work?'':'unset');
+  state.places.list.forEach(function(p){chip('⭐',p.name.split(',')[0],p,'new')});
+  c.appendChild(h('button',{class:'chip add',type:'button',onclick:function(){startSaveMode('new')}},[h('span',{class:'em',text:'+'}),'Nouveau']));
+}
+function startSaveMode(kind){
+  closePanel();setExp(true);state.saveAs=kind;state.moreMode='options';
+  $('#q').value='';$('#q').placeholder=kind==='home'?'Adresse de votre domicile':kind==='work'?'Adresse de votre travail':'Adresse à enregistrer';
+  renderMore();$('#q').focus();
+}
+function savePlace(pl){
+  var p={lat:pl.lat,lng:pl.lng,name:pl.name},k=state.saveAs;
+  if(k==='home')state.places.home=p;else if(k==='work')state.places.work=p;else state.places.list.push(p);
+  savePlaces();renderChips();setExp(false);$('#q').value='';
+  toast(k==='home'?'Domicile enregistré':k==='work'?'Travail enregistré':'Lieu enregistré');
+}
+function addRecent(d){
+  state.recent=[d].concat(state.recent.filter(function(r){return hav(r,d)>50})).slice(0,5);saveU('recent',state.recent);
+}
+renderChips();
+
+/* ---------- Partage ---------- */
+async function doShare(data){
+  try{if(navigator.share){await navigator.share(data);return}}catch(e){if(e&&e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(data.url);toast('Lien copié')}catch(e){toast(data.url,8000)}
+}
+function shareApp(){doShare({title:'Cap',text:'Essaie Cap, une appli de navigation.',url:location.href.split('#')[0]})}
+function sharePos(){
+  if(!state.pos){toast('Position introuvable pour le moment.');return}
+  var p=state.pos;
+  doShare({title:'Ma position',text:'Voici ma position.',url:'https://www.openstreetmap.org/?mlat='+p.lat+'&mlon='+p.lng+'#map=17/'+p.lat+'/'+p.lng});
+}
+
+/* ---------- Itinéraire ---------- */
+async function fetchRoute(from,to){
+  var u='https://router.project-osrm.org/route/v1/driving/'+from.lng+','+from.lat+';'+to.lng+','+to.lat+'?overview=full&geometries=geojson&steps=true';
+  var ex=[];if(PROF.avoidTolls)ex.push('toll');if(PROF.avoidHighways)ex.push('motorway');if(PROF.avoidFerries)ex.push('ferry');
+  var j=null;
+  if(ex.length){
+    try{var r0=await fetch(u+'&exclude='+ex.join(','));var j0=await r0.json();if(j0.code==='Ok'&&j0.routes.length)j=j0}catch(e){}
+    if(!j)toast('Évitements indisponibles pour ce trajet : itinéraire standard.',5000);
+  }
+  if(!j){var r=await fetch(u);j=await r.json()}
+  if(j.code!=='Ok'||!j.routes.length)throw new Error('Aucun itinéraire');
+  var rt=j.routes[0];
+  return {
+    dist:rt.distance,dur:rt.duration,
+    coords:rt.geometry.coordinates.map(function(c){return {lat:c[1],lng:c[0]}}),
+    steps:rt.legs[0].steps.map(function(s){return {
+      dist:s.distance,dur:s.duration,name:s.name||'',
+      type:s.maneuver.type,mod:s.maneuver.modifier||'',exit:s.maneuver.exit,
+      loc:{lat:s.maneuver.location[1],lng:s.maneuver.location[0]}
+    }})
+  };
+}
+function drawRoute(rt){
+  routeLayer.clearLayers();
+  var ll=rt.coords.map(function(c){return [c.lat,c.lng]});
+  L.polyline(ll,{color:'#4C86FF',weight:12,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(routeLayer);
+  L.polyline(ll,{color:'#FFFFFF',weight:5,lineCap:'round',lineJoin:'round'}).addTo(routeLayer);
+}
+async function setDestination(d){
+  if(!state.pos){toast('En attente de votre position GPS…');return}
+  state.dest=d;toast('Calcul de l\'itinéraire…',2500);
+  try{
+    var rt=await fetchRoute(state.pos,d);
+    state.route=rt;drawRoute(rt);addRecent(d);
+    if(destMarker)map.removeLayer(destMarker);
+    destMarker=L.marker([d.lat,d.lng],{icon:L.divIcon({className:'',html:'<div class="dest"></div>',iconSize:[30,30],iconAnchor:[8,30]}),interactive:false}).addTo(map);
+    state.follow=false;$('#btnLocate').hidden=false;
+    map.fitBounds(L.latLngBounds(rt.coords.map(function(c){return [c.lat,c.lng]})),{paddingTopLeft:[30,110],paddingBottomRight:[30,300]});
+    $('#pTitle').textContent='Vers '+d.name.split(',').slice(0,2).join(',');
+    $('#pTime').textContent=fmtTime(rt.dur);
+    $('#pMeta').textContent=fmtDist(rt.dist)+' · arrivée '+eta(rt.dur);
+    setMode('preview');
+  }catch(e){toast('Impossible de calculer cet itinéraire.',5000)}
+}
+$('#btnCancel').addEventListener('click',clearRoute);
+function clearRoute(){
+  routeLayer.clearLayers();if(destMarker){map.removeLayer(destMarker);destMarker=null}
+  state.route=null;state.dest=null;stepsKey=null;$('#navSteps').innerHTML='';setMode('idle');
+}
+
+var stepsKey=null,stepDistEl=null;
+function renderSteps(i,dist){
+  var rt=state.route,box=$('#navSteps');if(!rt)return;
+  var key=i+'|'+rt.dist+'|'+rt.dur;
+  if(key!==stepsKey){
+    stepsKey=key;box.innerHTML='';stepDistEl=null;
+    for(var j=i+1;j<rt.steps.length;j++){
+      var st=rt.steps[j],dd=(j===i+1)?dist:rt.steps[j-1].dist;
+      var dEl=h('b',{class:'nd',text:dd<30?'Maintenant':fmtDist(dd)});
+      if(j===i+1)stepDistEl=dEl;
+      box.appendChild(h('div',{class:'nstep'},[h('span',{class:'ni',html:iconFor(st)}),h('span',{class:'nt',text:instr(st)}),dEl]));
+    }
+  }else if(stepDistEl)stepDistEl.textContent=dist<30?'Maintenant':fmtDist(dist);
+}
+/* ---------- Instructions ---------- */
+var DIR={'left':'à gauche','right':'à droite','slight left':'légèrement à gauche','slight right':'légèrement à droite','sharp left':'franchement à gauche','sharp right':'franchement à droite','straight':'tout droit'};
+var ANG={'left':-90,'right':90,'slight left':-45,'slight right':45,'sharp left':-135,'sharp right':135,'straight':0,'uturn':180};
+function ord(n){return n===1?'première':n===2?'deuxième':n===3?'troisième':n+'e'}
+function instr(s){
+  var n=s.name?' sur '+s.name:'',d=DIR[s.mod]||'';
+  switch(s.type){
+    case 'depart':return 'Démarrez'+n;
+    case 'arrive':return s.mod==='left'?'Votre destination est à gauche':s.mod==='right'?'Votre destination est à droite':'Vous êtes arrivé à destination';
+    case 'roundabout':case 'rotary':case 'roundabout turn':return s.exit?'Au rond-point, prenez la '+ord(s.exit)+' sortie'+n:'Prenez le rond-point'+n;
+    case 'exit roundabout':case 'exit rotary':return 'Sortez du rond-point'+n;
+    case 'merge':return 'Insérez-vous'+n;
+    case 'on ramp':return 'Prenez la bretelle'+(d?' '+d:'')+n;
+    case 'off ramp':return 'Prenez la sortie'+(d?' '+d:'')+n;
+    case 'fork':return 'À la bifurcation, restez '+(d||'sur la voie')+n;
+    case 'end of road':return 'Au bout de la route, tournez '+(d||'')+n;
+    case 'continue':case 'new name':return 'Continuez '+(d&&s.mod!=='straight'?d:'tout droit')+n;
+    default:
+      if(s.mod==='uturn')return 'Faites demi-tour';
+      if(s.mod==='straight'||!d)return 'Continuez tout droit'+n;
+      return 'Tournez '+d+n;
+  }
+}
+function iconFor(s){
+  if(s.type==='arrive')return FLAG;
+  if(/roundabout|rotary/.test(s.type))return RING;
+  return arrowSvg(ANG[s.mod]!=null?ANG[s.mod]:0);
+}
+
+/* ---------- Navigation ---------- */
+var wake=null;
+async function requestWake(){try{if(state.set.keepAwake&&navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+$('#btnStart').addEventListener('click',function(){
+  if(!state.route)return;
+  unlockSpeech();
+  PROF.stats.trips++;saveProf();checkBadges();
+  state.stepIdx=0;state.announced={};state.offCount=0;state.arrived=false;
+  setMode('nav');state.follow=true;$('#btnLocate').hidden=true;
+  if(state.pos){camAnim(800);map.setView(state.pos,17,{animate:true})}
+  requestWake();
+  say(instr(state.route.steps[0])+'. Trajet de '+speakDist(state.route.dist)+', environ '+fmtTime(state.route.dur).replace(' min',' minutes').replace(' h ',' heures '),{interrupt:true});
+  navTick();
+});
+$('#btnStop').addEventListener('click',stopNav);
+function stopNav(){
+  if(synth)synth.cancel();
+  if(wake){try{wake.release()}catch(e){}wake=null}
+  clearRoute();$('#q').value='';
+}
+function navTick(){
+  var rt=state.route,p=state.pos;if(!rt||!p||state.arrived)return;
+  var steps=rt.steps,guard=0;
+  while(guard++<5){
+    var up0=steps[state.stepIdx+1];if(!up0)break;
+    if(hav(p,up0.loc)<25){
+      if(state.stepIdx+1>=steps.length-1){arrive();return}
+      state.stepIdx++;
+    }else break;
+  }
+  var i=state.stepIdx,up=steps[i+1];if(!up)return;
+  var dist=hav(p,up.loc);
+  $('#bIcon').innerHTML=iconFor(up);
+  $('#bDist').textContent=dist<30?'Maintenant':fmtDist(dist);
+  $('#bInstr').textContent=instr(up);
+  renderSteps(i,dist);
+  var remD=dist,remT=steps[i].dist>0?dist/steps[i].dist*steps[i].dur:0;
+  for(var j=i+1;j<steps.length;j++){remD+=steps[j].dist;remT+=steps[j].dur}
+  $('#nTime').textContent=fmtTime(remT);
+  $('#nMeta').textContent=fmtDist(remD)+' · arrivée '+eta(remT);
+  var ann=state.announced[i]||(state.announced[i]={});
+  var th=[['now',40],['mid',200],['far',600]];
+  for(var k=0;k<th.length;k++){
+    var key=th[k][0],lim=th[k][1];
+    if(dist<=lim&&!ann[key]){
+      for(var q=k;q<th.length;q++)ann[th[q][0]]=true;
+      var txt=instr(up);
+      if(key==='now')say(txt,{interrupt:true});
+      else if(up.type==='arrive')say('Votre destination est dans '+speakDist(dist));
+      else say('Dans '+speakDist(dist)+', '+lcfirst(txt));
+      break;
+    }
+  }
+  var off=distToPath(p,rt.coords);
+  if(off>45&&(state.acc||0)<70){state.offCount++}else state.offCount=0;
+  if(state.set.autoReroute&&state.offCount>=3&&!state.rerouting&&Date.now()-state.lastReroute>8000)reroute();
+}
+async function reroute(){
+  state.rerouting=true;state.lastReroute=Date.now();
+  toast('Recalcul de l\'itinéraire…',3000);say('Recalcul de l\'itinéraire',{interrupt:true});
+  try{
+    var rt=await fetchRoute(state.pos,state.dest);
+    state.route=rt;state.stepIdx=0;state.announced={};state.offCount=0;drawRoute(rt);
+  }catch(e){toast('Recalcul impossible. Nouvel essai bientôt.',3000)}
+  state.rerouting=false;
+}
+function arrive(){
+  state.arrived=true;
+  $('#bIcon').innerHTML=FLAG;$('#bDist').textContent='Arrivé';$('#bInstr').textContent='Vous êtes à destination';
+  say('Vous êtes arrivé à destination',{interrupt:true});toast('Vous êtes arrivé à destination',6000);
+  setTimeout(stopNav,5000);
+}
+
+/* ---------- Alertes partagées ---------- */
+var UID=load('uid',null);if(!UID){UID=Math.random().toString(36).slice(2,10);save('uid',UID)}
+function grp(){return state.set.group||''}
+function findAlert(id){return state.alerts.find(function(a){return a.id===id})}
+state.alerts.forEach(function(a){if(!a.t0)a.t0=a.t;if(!a.votes)a.votes={};if(a.g==null)a.g=''});
+function tally(a){var y=0,n=0,v=a.votes||{};for(var k in v){if(v[k].v)y++;else n++}return {y:y,n:n}}
+function alive(a){var c=tally(a);return !(c.n>0&&c.n>=c.y)}
+function recalcT(a){var m=a.t0||a.t,v=a.votes||{};for(var k in v){if(v[k].v&&v[k].t>m)m=v[k].t}a.t=m}
+function applyVote(a,u,v,t){a.votes=a.votes||{};var c=a.votes[u];if(!c||t>=c.t)a.votes[u]={v:v?1:0,t:t};recalcT(a)}
+function purgeAlerts(){
+  var now=Date.now(),before=state.alerts.length;
+  state.alerts=state.alerts.filter(function(a){return TYPES[a.type]&&now-a.t<ttlFor(a)});
+  if(state.alerts.length!==before)save('alerts',state.alerts);
+}
+function drawAlerts(){
+  purgeAlerts();alertLayer.clearLayers();
+  state.alerts.forEach(function(a){
+    if(!alive(a)||(a.g||'')!==grp())return;
+    var T=TYPES[a.type],c=tally(a);
+    var m=L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',html:'<div class="pin">'+alertEmoji(a)+'</div>',iconSize:[36,36],iconAnchor:[18,18]})});
+    var box=document.createElement('div');
+    var t=document.createElement('b');t.textContent=alertEmoji(a)+' '+(a.sub&&a.sub!==T.label?T.label+' · '+a.sub:T.label);box.appendChild(t);
+    var ago=document.createElement('div');ago.style.cssText='font-size:12px;color:#DCE7FF;margin-top:2px';
+    ago.textContent='Confirmé il y a '+fmtAgo(Date.now()-a.t)+' · ✔ '+c.y+' · ✖ '+c.n+(a.price?' · '+String(a.price).replace('.',',')+' €/L':'')+(a.by?' · par '+a.by:'');box.appendChild(ago);
+    var row=document.createElement('div');row.className='popbtns';
+    var yes=document.createElement('button');yes.textContent='Toujours là';
+    var no=document.createElement('button');no.textContent='Plus là';no.className='ghost';
+    yes.addEventListener('click',function(){map.closePopup();confirmAlert(a,1);toast('Merci, alerte confirmée')});
+    no.addEventListener('click',function(){map.closePopup();confirmAlert(a,0);toast('Merci, votre réponse est envoyée')});
+    row.appendChild(yes);row.appendChild(no);box.appendChild(row);
+    m.bindPopup(box);m.addTo(alertLayer);
+  });
+}
+var redrawT=null;
+function scheduleDraw(){clearTimeout(redrawT);redrawT=setTimeout(function(){save('alerts',state.alerts);drawAlerts()},300)}
+
+/* Réseau : service ouvert ntfy.sh, un canal par zone de 0,1° autour de vous */
+var NET={es:null,key:'',ok:false};
+function topicBase(){return 'capalertes-k7q2x9m4'+(grp()?'-'+grp():'')}
+function cellTopic(i,j){return topicBase()+'-'+i+'_'+j}
+function netStatus(){var el=$('#netStat');if(el)el.textContent=NET.ok?'Connecté':'Hors ligne'}
+function okNum(x,lo,hi){return typeof x==='number'&&isFinite(x)&&x>=lo&&x<=hi}
+function cleanSnap(id,ty,sb,la,ln,t0,pr){
+  if(typeof id!=='string'||id.length>24)return null;
+  var T=TYPES[ty];if(!T)return null;
+  if(!okNum(la,-90,90)||!okNum(ln,-180,180)||!okNum(t0,1.6e12,Date.now()+600000))return null;
+  if(sb!=null&&!(T.subs&&T.subs.some(function(s){return s[0]===sb})))sb=null;
+  var a={id:id,type:ty,sub:sb||null,lat:la,lng:ln,t0:t0,t:t0,g:grp(),votes:{}};
+  if(okNum(pr,0.01,10))a.price=pr;
+  return a;
+}
+function handleNet(ev){
+  if(!ev||typeof ev!=='object')return;
+  var now=Date.now(),a;
+  if(ev.k==='n'){
+    if(findAlert(ev.id))return;
+    a=cleanSnap(ev.id,ev.ty,ev.sb,ev.la,ev.ln,ev.t,ev.pr);if(!a)return;
+    if(typeof ev.nm==='string'&&ev.nm)a.by=ev.nm.replace(/[<>]/g,'').slice(0,20);
+    if(typeof ev.u==='string')applyVote(a,ev.u.slice(0,16),1,a.t0);
+    state.alerts.push(a);scheduleDraw();
+  }else if(ev.k==='v'){
+    if(typeof ev.u!=='string'||!okNum(ev.t,1.6e12,now+600000))return;
+    a=findAlert(ev.id);
+    if(!a&&ev.a&&typeof ev.a==='object'){a=cleanSnap(ev.id,ev.a.ty,ev.a.sb,ev.a.la,ev.a.ln,ev.a.t0,ev.a.pr);if(a)state.alerts.push(a)}
+    if(!a)return;
+    applyVote(a,ev.u.slice(0,16),ev.v?1:0,ev.t);scheduleDraw();
+  }
+}
+function netConnect(force){
+  if(typeof EventSource==='undefined')return;
+  var c=state.pos||map.getCenter(),i=Math.floor(c.lat*10),j=Math.floor(c.lng*10),key=i+'_'+j+'_'+grp();
+  if(!force&&key===NET.key&&NET.es)return;
+  NET.key=key;if(NET.es){NET.es.close();NET.es=null}
+  var ts=[];for(var di=-1;di<=1;di++)for(var dj=-1;dj<=1;dj++)ts.push(cellTopic(i+di,j+dj));
+  try{
+    var es=new EventSource('https://ntfy.sh/'+ts.join(',')+'/sse?since=12h');
+    NET.es=es;
+    es.onopen=function(){NET.ok=true;netStatus()};
+    es.onerror=function(){NET.ok=false;netStatus()};
+    es.onmessage=function(e){
+      try{var m=JSON.parse(e.data);if(m.event&&m.event!=='message')return;handleNet(JSON.parse(m.message))}catch(x){}
+    };
+  }catch(x){NET.ok=false;netStatus()}
+}
+function netSend(a,obj){
+  var i=Math.floor(a.lat*10),j=Math.floor(a.lng*10);
+  return fetch('https://ntfy.sh/'+cellTopic(i,j),{method:'POST',body:JSON.stringify(obj)})
+    .then(function(r){NET.ok=r.ok;netStatus();return r.ok})
+    .catch(function(){NET.ok=false;netStatus();return false});
+}
+function confirmAlert(a,v,auto){
+  var t=Date.now();
+  if(!auto){PROF.stats.confirms++;saveProf();checkBadges()}
+  applyVote(a,UID,v,t);save('alerts',state.alerts);drawAlerts();
+  netSend(a,{k:'v',id:a.id,v:v?1:0,t:t,u:UID,au:auto?1:0,
+    a:{ty:a.type,sb:a.sub||null,la:+a.lat.toFixed(5),ln:+a.lng.toFixed(5),t0:a.t0,pr:a.price||null}});
+}
+function report(type,sub,price){
+  var p=state.pos||{lat:map.getCenter().lat,lng:map.getCenter().lng};
+  var dup=state.alerts.find(function(a){return a.type===type&&(a.sub||null)===(sub||null)&&(a.g||'')===grp()&&alive(a)&&hav(a,p)<40});
+  closePanel();
+  if(dup){confirmAlert(dup,1);toast('Cette alerte existe déjà, elle est confirmée.');return}
+  var t=Date.now(),a={id:t.toString(36)+Math.random().toString(36).slice(2,6),type:type,sub:sub||null,lat:p.lat,lng:p.lng,t:t,t0:t,g:grp(),votes:{}};
+  if(price)a.price=price;
+  a.votes[UID]={v:1,t:t};
+  if(PROF.showName&&PROF.name)a.by=PROF.name.slice(0,20);
+  PROF.stats.reports++;saveProf();checkBadges();
+  state.alerts.push(a);save('alerts',state.alerts);drawAlerts();
+  toast('Merci ! Alerte ajoutée : '+TYPES[type].label);
+  netSend(a,{k:'n',id:a.id,ty:type,sb:a.sub,la:+p.lat.toFixed(5),ln:+p.lng.toFixed(5),t:t,pr:price||null,u:UID,nm:(PROF.showName&&PROF.name)?PROF.name.slice(0,20):null})
+    .then(function(ok){if(!ok)toast('Alerte visible ici seulement : le partage est hors ligne.',6000)});
+}
+
+/* Confirmation : 10 secondes pour répondre, sans réponse l'alerte reste confirmée */
+var votePrompt={a:null,timer:null,asked:{}};
+function showVote(a){
+  if(votePrompt.a)return;
+  votePrompt.a=a;votePrompt.asked[a.id]=Date.now();
+  var T=TYPES[a.type],nm=alertName(a);
+  $('#vEmoji').textContent=alertEmoji(a);
+  $('#vTitle').textContent=nm.charAt(0).toUpperCase()+nm.slice(1)+' : toujours là ?';
+  var bar=$('#vBar');bar.classList.remove('run');void bar.offsetWidth;bar.classList.add('run');
+  $('#vote').hidden=false;
+  say('Toujours là ?',{kind:'alert'});
+  votePrompt.timer=setTimeout(function(){answerVote(1,true)},10000);
+}
+function answerVote(v,auto){
+  var a=votePrompt.a;if(!a)return;
+  clearTimeout(votePrompt.timer);votePrompt.a=null;$('#vote').hidden=true;
+  confirmAlert(a,v,auto);
+  if(!auto)toast(v?'Merci, alerte confirmée':'Merci, votre réponse est envoyée',2500);
+}
+$('#vYes').addEventListener('click',function(){answerVote(1,false)});
+$('#vNo').addEventListener('click',function(){answerVote(0,false)});
+
+function checkAlerts(){
+  var p=state.pos;if(!p||!state.alerts.length)return;
+  var now=Date.now(),nav=state.mode==='nav'&&state.route;
+  state.alerts.forEach(function(a){
+    var T=TYPES[a.type];
+    if(!T||!T.alert||!alive(a)||(a.g||'')!==grp()||state.set.alertOff[a.type])return;
+    var d=hav(p,a);if(d>250)return;
+    if(state.heading!=null&&(state.speed==null||state.speed>2)){
+      if(angDiff(state.heading,bearing(p,a))>75)return;
+    }else if(d>120)return;
+    if(nav&&distToPath(a,state.route.coords)>35)return;
+    if(!state.spoken[a.id]||now-state.spoken[a.id]>=600000){
+      state.spoken[a.id]=now;
+      var nm=alertName(a);
+      toast(alertEmoji(a)+' '+nm.charAt(0).toUpperCase()+nm.slice(1)+' dans '+fmtDist(d),6000);
+      if(state.set.vibrate&&navigator.vibrate)try{navigator.vibrate([200,100,200])}catch(e){}
+      say('Attention, '+nm+' dans '+speakDist(d),{kind:'alert',interrupt:true});
+    }
+    var mine=a.votes&&a.votes[UID];
+    if(d<=120&&!votePrompt.a&&(!votePrompt.asked[a.id]||now-votePrompt.asked[a.id]>1800000)&&!(mine&&now-mine.t<1800000))showVote(a);
+  });
+}
+drawAlerts();setInterval(drawAlerts,300000);netConnect();
+applyAudioVis();
+sheetApply(true);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){sheetApply(true)});
+window.addEventListener('load',function(){sheetApply(true)});
+window.addEventListener('resize',function(){sheetApply(true)});
+setTimeout(function(){sheetApply(true)},700);
+try{var fl=sessionStorage.getItem('cap.flash');if(fl){sessionStorage.removeItem('cap.flash');setTimeout(function(){toast(fl,4000)},500)}}catch(e){}
+
+/* ---------- Spotify ---------- */
+var SP={cid:SPOTIFY_CLIENT_ID||load('sp_cid',''),tok:loadU('sp_tok',null),open:false,timer:null,playing:false};
+function spRedirect(){return location.origin+location.pathname.replace(/index\.html$/,'')}
+function b64url(buf){var t='';new Uint8Array(buf).forEach(function(x){t+=String.fromCharCode(x)});return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function spLogin(cid){
+  cid=(cid||'').trim();
+  if(!/^[a-f0-9]{32}$/i.test(cid)){toast('Le Client ID doit contenir 32 caractères.',5000);return}
+  if(!window.crypto||!crypto.subtle){toast('Connexion impossible : ouvrez Cap en https.',6000);return}
+  SP.cid=cid;
+  var ver=b64url(crypto.getRandomValues(new Uint8Array(48)));
+  var ch=b64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ver)));
+  var st=b64url(crypto.getRandomValues(new Uint8Array(12)));
+  save('sp_ver',ver);save('sp_state',st);
+  location.href='https://accounts.spotify.com/authorize?'+new URLSearchParams({response_type:'code',client_id:cid,scope:'user-read-playback-state user-modify-playback-state user-read-currently-playing',redirect_uri:spRedirect(),state:st,code_challenge_method:'S256',code_challenge:ch}).toString();
+}
+function spStore(j){SP.tok={a:j.access_token,r:j.refresh_token||(SP.tok&&SP.tok.r)||null,exp:Date.now()+((j.expires_in||3600)-60)*1000};saveU('sp_tok',SP.tok)}
+async function spHandleReturn(){
+  var q=new URLSearchParams(location.search);
+  if(!q.has('code')&&!q.has('error'))return;
+  var code=q.get('code'),st=q.get('state'),err=q.get('error');
+  history.replaceState(null,'',location.pathname+location.hash);
+  if(err){toast('Connexion Spotify refusée.',5000);return}
+  if(!code||st!==load('sp_state',null))return;
+  try{
+    var r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({client_id:SP.cid,grant_type:'authorization_code',code:code,redirect_uri:spRedirect(),code_verifier:load('sp_ver','')}).toString()});
+    var j=await r.json();if(!r.ok)throw new Error('token');
+    spStore(j);toast('Spotify associé',3000);PL.src='spotify';state.set.audioSrc='spotify';saveSet();openPlayer(true);
+  }catch(e){toast('Connexion Spotify impossible. Vérifiez le Client ID et l\'adresse de redirection.',7000)}
+}
+async function spToken(){
+  if(!SP.tok)return null;
+  if(Date.now()<SP.tok.exp)return SP.tok.a;
+  if(!SP.tok.r){SP.tok=null;saveU('sp_tok',null);return null}
+  try{
+    var r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({grant_type:'refresh_token',refresh_token:SP.tok.r,client_id:SP.cid}).toString()});
+    var j=await r.json();if(!r.ok)throw new Error('refresh');
+    spStore(j);return SP.tok.a;
+  }catch(e){SP.tok=null;saveU('sp_tok',null);return null}
+}
+async function spApi(method,path){
+  var t=await spToken();if(!t)return {s:401};
+  try{
+    var r=await fetch('https://api.spotify.com/v1'+path,{method:method,headers:{Authorization:'Bearer '+t}});
+    var j=null;if(r.status===200){try{j=await r.json()}catch(e){}}
+    return {s:r.status,j:j};
+  }catch(e){return {s:0}}
+}
+var PL_PLAY='<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
+var PL_PAUSE='<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z"/></svg>';
+function plText(t,sub){$('#plTitle').textContent=t;$('#plSub').textContent=sub}
+async function spRefresh(){
+  if(!SP.open)return;
+  var r=await spApi('GET','/me/player');
+  if(!SP.open)return;
+  if(r.s===200&&r.j&&r.j.item){
+    var it=r.j.item,imgs=(it.album&&it.album.images)||[],img=imgs.length?imgs[imgs.length>1?1:0].url:'';
+    SP.playing=!!r.j.is_playing;
+    plText(it.name,(it.artists||[]).map(function(x){return x.name}).join(', ')||(it.show&&it.show.name)||'');
+    spNext(it.id);
+    var art=$('#plArt');if(img){art.src=img;art.style.visibility='visible'}else art.style.visibility='hidden';
+  }else if(r.s===204||(r.s===200&&r.j&&!r.j.item)){
+    SP.playing=false;plText('Aucune musique en cours','Lancez un titre dans Spotify');$('#plArt').style.visibility='hidden';
+  }else if(r.s===401||!SP.tok){
+    plText('Spotify déconnecté','Touchez le bouton musique pour vous reconnecter');$('#plArt').style.visibility='hidden';
+    SP.tok=null;saveU('sp_tok',null);openPlayer(false);toast('Reconnectez Spotify.',4000);return;
+  }else if(r.s===403){plText('Accès refusé par Spotify','Vérifiez que votre compte est autorisé dans l\'application')}
+  else if(r.s===429){}
+  else plText('Spotify injoignable','Vérifiez votre connexion');
+  $('#plPlay').innerHTML=SP.playing?PL_PAUSE:PL_PLAY;
+}
+var spLastId=null;
+async function spNext(id){
+  if(!state.set.showNext){$('#plNxt').textContent='';return}
+  if(id===spLastId)return;spLastId=id;
+  var r=await spApi('GET','/me/player/queue');
+  var q=r.j&&r.j.queue&&r.j.queue[0];
+  if(PL.src==='spotify')$('#plNxt').textContent=q&&q.name?'Ensuite : '+q.name:'';
+}
+function openPlayer(on){
+  var src=PL.src;
+  PL.open=!!on&&state.set.showPlayer&&(src==='radio'||(src==='embed'&&!!state.set.spEmbed)||(src==='spotify'&&!!SP.tok));
+  SP.open=PL.open&&src==='spotify';
+  saveU('sp_open',PL.open);
+  $('#player').hidden=!PL.open;clearInterval(SP.timer);
+  $('#player').classList.toggle('emb',PL.open&&src==='embed');
+  document.body.classList.toggle('embp',PL.open&&src==='embed');
+  applyVideoVis();
+  if(PL.open&&src==='embed'){embMount();embRender()}else embTeardown();
+  if(!PL.open)return;
+  if(src==='embed')return;
+  if(src==='spotify'){
+    $('#plPlay').innerHTML=PL_PLAY;plText('Spotify','Chargement…');$('#plNxt').textContent='';$('#plArt').style.visibility='hidden';spLastId=null;
+    spRefresh();SP.timer=setInterval(function(){if(!document.hidden)spRefresh()},4000);
+  }else plRender();
+}
+async function spCtl(kind){
+  var req=kind==='next'?['POST','/me/player/next']:kind==='prev'?['POST','/me/player/previous']:(SP.playing?['PUT','/me/player/pause']:['PUT','/me/player/play']);
+  if(kind==='play'){SP.playing=!SP.playing;$('#plPlay').innerHTML=SP.playing?PL_PAUSE:PL_PLAY}
+  var r=await spApi(req[0],req[1]);
+  if(r.s===403)toast('Changer de titre demande Spotify Premium.',6000);
+  else if(r.s===404)toast('Aucun appareil actif. Lancez Spotify sur votre téléphone.',5000);
+  setTimeout(spRefresh,700);
+}
+$('#plPrev').addEventListener('click',function(){plAct('prev')});
+$('#plNext').addEventListener('click',function(){plAct('next')});
+$('#plPlay').addEventListener('click',function(){plAct('play')});
+$('#plMore').addEventListener('click',function(){stack=[];openPanel('music')});
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&SP.open)spRefresh()});
+spHandleReturn().then(function(){if(!PL.open&&loadU('sp_open',false))openPlayer(true)});
+
+/* ---------- Lecteur audio : radios intégrées et applications ---------- */
+var PL={src:state.set.audioSrc||null,open:false};
+var RADIO_ART='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="20" fill="#1A3678"/><text x="48" y="66" font-size="52" text-anchor="middle">📻</text></svg>');
+var RAD={au:new Audio(),cur:state.set.radioLast||null,list:[],playing:false,loading:false};
+RAD.au.preload='none';
+RAD.au.addEventListener('playing',function(){RAD.playing=true;RAD.loading=false;plRender()});
+RAD.au.addEventListener('pause',function(){RAD.playing=false;plRender()});
+RAD.au.addEventListener('waiting',function(){RAD.loading=true;plRender()});
+RAD.au.addEventListener('error',function(){RAD.playing=false;RAD.loading=false;plRender();if(RAD.au.getAttribute('src'))toast('Cette radio ne répond pas. Essayez-en une autre.',5000)});
+$('#plArt').addEventListener('error',function(){if(this.src!==RADIO_ART)this.src=RADIO_ART});
+function plRender(){
+  if(PL.src!=='radio'||!PL.open)return;
+  var c=RAD.cur,art=$('#plArt');
+  plText(c?c.name:'Radios en direct',c?(RAD.loading?'Connexion…':RAD.playing?'En direct':'En pause'):'Choisissez une radio');
+  art.src=(c&&c.fav)||RADIO_ART;art.style.visibility='visible';
+  $('#plPlay').innerHTML=RAD.playing?PL_PAUSE:PL_PLAY;
+  var nx=radioNeighbor(1);
+  $('#plNxt').textContent=(state.set.showNext&&nx&&c&&nx.id!==c.id)?'Ensuite : '+nx.name:'';
+}
+function radioNeighbor(dir){
+  var list=RAD.list.length?RAD.list:state.set.radioFavs;
+  if(!list.length)return null;
+  var idx=RAD.cur?list.findIndex(function(x){return x.id===RAD.cur.id}):-1;
+  if(idx<0)return dir>0?list[0]:list[list.length-1];
+  return list[(idx+dir+list.length)%list.length];
+}
+function mediaMeta(){
+  if(!('mediaSession' in navigator)||!RAD.cur)return;
+  try{
+    navigator.mediaSession.metadata=new MediaMetadata({title:RAD.cur.name,artist:'Radio en direct · Cap',artwork:RAD.cur.fav?[{src:RAD.cur.fav,sizes:'96x96'}]:[]});
+    navigator.mediaSession.setActionHandler('play',function(){radioAct('play')});
+    navigator.mediaSession.setActionHandler('pause',function(){RAD.au.pause()});
+    navigator.mediaSession.setActionHandler('nexttrack',function(){radioAct('next')});
+    navigator.mediaSession.setActionHandler('previoustrack',function(){radioAct('prev')});
+  }catch(e){}
+}
+function playStation(st,list){
+  if(list&&list.length)RAD.list=list;
+  if(PL.src==='embed'){PL.src='radio';openPlayer(false)}
+  RAD.cur=st;state.set.radioLast=st;state.set.audioSrc='radio';saveSet();
+  if(PL.src==='spotify'&&SP.tok){spApi('PUT','/me/player/pause');SP.playing=false}
+  PL.src='radio';RAD.loading=true;
+  try{RAD.au.src=st.url;var p=RAD.au.play();if(p&&p.catch)p.catch(function(){RAD.loading=false;plRender();toast('Impossible de lancer cette radio.',4000)})}catch(e){}
+  openPlayer(true);plRender();mediaMeta();
+}
+function radioAct(k){
+  if(k==='play'){
+    if(!RAD.cur){stack=[];openPanel('radio');return}
+    if(RAD.au.paused)playStation(RAD.cur);else RAD.au.pause();
+    return;
+  }
+  var nx=radioNeighbor(k==='next'?1:-1);
+  if(!nx){toast('Ajoutez des radios en favori pour passer de l\'une à l\'autre.',4000);return}
+  playStation(nx);
+}
+function plAct(k){if(PL.src==='radio')radioAct(k);else if(PL.src==='embed')embAct(k);else if(PL.src==='spotify')spCtl(k)}
+var PROV={spotify:'Spotify',yt:'YouTube',sc:'SoundCloud'};
+function ytKey(){return YOUTUBE_API_KEY||load('yt_key','')}
+async function searchYouTube(q){
+  var key=ytKey();if(!key)return {err:'nokey'};
+  try{
+    var r=await fetch('https://www.googleapis.com/youtube/v3/search?'+new URLSearchParams({part:'snippet',type:'video',videoEmbeddable:'true',videoCategoryId:'10',maxResults:'10',q:q,key:key}));
+    var j=await r.json();
+    if(!r.ok){var why=(j&&j.error&&j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason)||String(r.status);return {err:why}}
+    return {items:(j.items||[]).filter(function(x){return x.id&&x.id.videoId}).map(function(x){
+      var t=document.createElement('textarea');t.innerHTML=x.snippet.title;
+      return {p:'yt',type:'video',id:x.id.videoId,title:t.value,sub:x.snippet.channelTitle||''};
+    })};
+  }catch(e){return {err:'network'}}
+}
+async function searchSpotify(q){
+  if(!SP.tok)return {err:'noassoc'};
+  var r=await spApi('GET','/search?type=track,playlist,album&limit=5&q='+encodeURIComponent(q));
+  if(r.s===401)return {err:'noassoc'};
+  if(r.s!==200||!r.j)return {err:r.s===0?'network':String(r.s)};
+  var out=[];
+  (r.j.tracks&&r.j.tracks.items||[]).forEach(function(x){if(x)out.push({p:'spotify',type:'track',id:x.id,title:x.name,sub:'Titre · '+(x.artists||[]).map(function(a){return a.name}).join(', ')})});
+  (r.j.playlists&&r.j.playlists.items||[]).forEach(function(x){if(x)out.push({p:'spotify',type:'playlist',id:x.id,title:x.name,sub:'Playlist'+(x.owner&&x.owner.display_name?' · '+x.owner.display_name:'')})});
+  (r.j.albums&&r.j.albums.items||[]).forEach(function(x){if(x)out.push({p:'spotify',type:'album',id:x.id,title:x.name,sub:'Album · '+(x.artists||[]).map(function(a){return a.name}).join(', ')})});
+  return {items:out};
+}
+var EMB_TYPES={playlist:'Playlist',album:'Album',track:'Titre',episode:'Épisode',show:'Podcast',artist:'Artiste',video:'Vidéo',set:'Playlist',song:'Titre'};
+function parseLink(t){
+  t=(t||'').trim();var m;
+  m=t.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(playlist|album|track|episode|show|artist)\/([A-Za-z0-9]{22})/)||t.match(/^spotify:(playlist|album|track|episode|show|artist):([A-Za-z0-9]{22})$/);
+  if(m)return {p:'spotify',type:m[1],id:m[2]};
+  if(/(^|\/\/|\.)(youtube\.com|youtu\.be)\//i.test(t)){
+    m=t.match(/(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
+    if(m)return {p:'yt',type:'video',id:m[1]};
+    m=t.match(/[?&]list=([A-Za-z0-9_-]{10,})/);
+    if(m)return {p:'yt',type:'playlist',id:m[1]};
+  }
+  if(/^https?:\/\/(www\.|m\.)?soundcloud\.com\/[^\/\s]+\/[^\s]+/i.test(t)){
+    var u=t.split('?')[0].split('#')[0];
+    return {p:'sc',type:/\/sets\//.test(u)?'set':'track',id:u};
+  }
+  return null;
+}
+function parseSpotify(t){var o=parseLink(t);return o&&o.p==='spotify'?o:null}
+function embedSrc(c){
+  var p=c.p||'spotify';
+  if(p==='spotify')return {src:'https://open.spotify.com/embed/'+c.type+'/'+c.id+'?utm_source=generator&theme=0',h:152};
+  if(p==='yt')return {src:c.type==='playlist'?'https://www.youtube.com/embed/videoseries?list='+c.id+'&playsinline=1':'https://www.youtube.com/embed/'+c.id+'?playsinline=1&rel=0',h:200};
+  if(p==='sc')return {src:'https://w.soundcloud.com/player/?url='+encodeURIComponent(c.id)+'&color=%231A3678&auto_play=false&hide_related=true&show_comments=false&visual=false',h:c.type==='set'?300:166};
+  return null;
+}
+var EMB={api:null,cbs:[],ctl:null,yt:null,sc:null,live:null,prov:null,paused:true,tm:0,adv:0,tok:0,loading:false,metaTried:{}};
+function embApi(cb){
+  if(EMB.api)return cb(EMB.api);
+  EMB.cbs.push(cb);
+  if(document.getElementById('spApiJs'))return;
+  window.onSpotifyIframeApiReady=function(a){EMB.api=a;var l=EMB.cbs;EMB.cbs=[];l.forEach(function(f){f(a)})};
+  var sc=document.createElement('script');sc.id='spApiJs';sc.src='https://open.spotify.com/embed/iframe-api/v1';sc.async=true;
+  sc.onerror=function(){var l=EMB.cbs;EMB.cbs=[];sc.remove();l.forEach(function(f){f(null)})};
+  document.head.appendChild(sc);
+}
+function loadScript(id,src,test,cb){
+  if(test())return cb(true);
+  var old=document.getElementById(id);if(old)old.remove();
+  var sc=document.createElement('script');sc.id=id;sc.src=src;sc.async=true;
+  sc.onload=function(){cb(test())};sc.onerror=function(){cb(false)};
+  document.head.appendChild(sc);
+}
+/* L'API YouTube charge d'abord un petit script, puis un second : elle prévient quand elle est prête. */
+function ytApi(cb){
+  if(window.YT&&YT.Player)return cb(true);
+  (EMB.ytcb=EMB.ytcb||[]).push(cb);
+  if(document.getElementById('ytApiJs'))return;
+  window.onYouTubeIframeAPIReady=function(){var l=EMB.ytcb||[];EMB.ytcb=[];l.forEach(function(f){f(true)})};
+  var sc=document.createElement('script');sc.id='ytApiJs';sc.src='https://www.youtube.com/iframe_api';sc.async=true;
+  sc.onerror=function(){var l=EMB.ytcb||[];EMB.ytcb=[];sc.remove();l.forEach(function(f){f(false)})};
+  document.head.appendChild(sc);
+}
+function embCur(){var q=state.set.spQ||[];return q[state.set.spI||0]||null}
+function embUri(c){return 'spotify:'+c.type+':'+c.id}
+function embMeta(c){
+  if((c.p||'spotify')!=='spotify')return;
+  var k=c.type+c.id;if(c.title||EMB.metaTried[k])return;EMB.metaTried[k]=1;
+  try{fetch('https://open.spotify.com/oembed?url='+encodeURIComponent('https://open.spotify.com/'+c.type+'/'+c.id)).then(function(r){return r.json()}).then(function(j){
+    c.title=j.title||'';c.thumb=j.thumbnail_url||'';saveSet();embRender();
+  }).catch(function(){})}catch(e){}
+}
+function applyVideoVis(){
+  var c=embCur();
+  $('#player').classList.toggle('novid',state.set.showVideo===false&&PL.src==='embed'&&PL.open&&!!c&&(c.p||'spotify')==='yt');
+}
+function embRender(){
+  applyVideoVis();
+  if(PL.src!=='embed'||!PL.open)return;
+  var q=state.set.spQ||[],i=state.set.spI||0,c=q[i];if(!c)return;
+  var p=c.p||'spotify',lv=EMB.live;
+  embMeta(c);
+  plText((lv&&lv.title)||c.title||EMB_TYPES[c.type]||PROV[p],PROV[p]+(q.length>1?' · '+(i+1)+'/'+q.length:''));
+  var n=q.length>1?q[(i+1)%q.length]:null;
+  $('#plNxt').textContent=(state.set.showNext&&n)?'Ensuite : '+(n.title||EMB_TYPES[n.type]||PROV[n.p||'spotify']):'';
+  var a=$('#plArt');a.style.visibility='visible';a.src=(lv&&lv.thumb)||c.thumb||RADIO_ART;
+  $('#plPlay').innerHTML=EMB.paused?PL_PLAY:PL_PAUSE;
+}
+function embAdvance(){
+  var cu=embCur(),q=state.set.spQ||[];
+  if(cu&&cu.type!=='playlist'&&cu.type!=='set'&&cu.type!=='album'&&q.length>1&&Date.now()-EMB.adv>6000){EMB.adv=Date.now();embAct('next')}
+}
+function embPlain(c){
+  var wrap=$('#spWrap'),e=embedSrc(c);if(!e)return null;
+  wrap.innerHTML='';
+  var f=document.createElement('iframe');f.title='Lecteur '+PROV[c.p||'spotify'];
+  f.allow='autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture';
+  f.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+  f.style.height=e.h+'px';f.src=e.src;wrap.appendChild(f);return f;
+}
+function embMount(){
+  var c=embCur();if(!c)return;var p=c.p||'spotify';
+  if(EMB.prov&&EMB.prov!==p)embTeardown();
+  EMB.prov=p;EMB.live=null;
+  if(p==='spotify')return mountSp(c);
+  if(p==='yt')return mountYt(c);
+  if(p==='sc')return mountSc(c);
+  EMB.paused=true;embPlain(c);
+}
+function mountSp(c){
+  var wrap=$('#spWrap');
+  if(EMB.ctl){try{EMB.ctl.loadUri(embUri(c))}catch(e){}EMB.paused=true;return}
+  if(EMB.loading)return;
+  EMB.loading=true;var my=++EMB.tok;clearTimeout(EMB.tm);
+  EMB.tm=setTimeout(function(){if(!EMB.ctl&&my===EMB.tok){EMB.loading=false;embPlain(c)}},6000);
+  embApi(function(api){
+    if(my!==EMB.tok)return;
+    if(!api){clearTimeout(EMB.tm);EMB.loading=false;embPlain(c);return}
+    wrap.innerHTML='';var host=document.createElement('div');wrap.appendChild(host);
+    api.createController(host,{uri:embUri(embCur()||c),width:'100%',height:152},function(ctl){
+      if(my!==EMB.tok){try{ctl.destroy()}catch(e){}return}
+      clearTimeout(EMB.tm);EMB.ctl=ctl;EMB.loading=false;
+      ctl.addListener('playback_update',function(e){
+        var d=(e&&e.data)||{};EMB.paused=!!d.isPaused;embRender();
+        if(d.duration>0&&d.position>=d.duration-250)embAdvance();
+      });
+    });
+  });
+}
+function mountYt(c){
+  if(EMB.yt){
+    try{if(c.type==='playlist')EMB.yt.loadPlaylist({list:c.id,listType:'playlist'});else EMB.yt.loadVideoById(c.id)}catch(e){}
+    return;
+  }
+  if(EMB.loading)return;
+  EMB.loading=true;var my=++EMB.tok;clearTimeout(EMB.tm);
+  EMB.tm=setTimeout(function(){if(!EMB.yt&&my===EMB.tok){EMB.loading=false;embPlain(c)}},8000);
+  ytApi(function(ok){
+    if(my!==EMB.tok)return;
+    if(!ok){clearTimeout(EMB.tm);EMB.loading=false;embPlain(c);return}
+    var wrap=$('#spWrap');wrap.innerHTML='';var host=document.createElement('div');wrap.appendChild(host);
+    var cc=embCur()||c,vars={playsinline:1,rel:0};
+    if(cc.type==='playlist'){vars.listType='playlist';vars.list=cc.id}
+    new YT.Player(host,{width:'100%',height:200,videoId:cc.type==='playlist'?undefined:cc.id,playerVars:vars,events:{
+      onReady:function(e){
+        if(my!==EMB.tok){try{e.target.destroy()}catch(x){}return}
+        clearTimeout(EMB.tm);EMB.yt=e.target;EMB.loading=false;
+      },
+      onStateChange:function(e){
+        if(my!==EMB.tok)return;
+        var st=e.data;EMB.paused=st!==1&&st!==3;
+        try{var d=e.target.getVideoData();if(d&&d.video_id){EMB.live={title:d.title,thumb:'https://i.ytimg.com/vi/'+d.video_id+'/mqdefault.jpg'};var cu=embCur();if(cu&&cu.type==='video'&&!cu.title){cu.title=d.title;saveSet()}}}catch(x){}
+        embRender();
+        if(st===0)embAdvance();
+      }
+    }});
+  });
+}
+function mountSc(c){
+  var cur=embCur()||c;
+  if(EMB.sc){
+    var e=embedSrc(cur);$('#spWrap iframe').style.height=e.h+'px';
+    try{EMB.sc.load(cur.id,{auto_play:true,hide_related:true,show_comments:false,visual:false})}catch(x){}
+    return;
+  }
+  var f=embPlain(cur);EMB.paused=true;
+  var my=EMB.tok;
+  loadScript('scApiJs','https://w.soundcloud.com/player/api.js',function(){return !!(window.SC&&SC.Widget)},function(ok){
+    if(!ok||my!==EMB.tok||!f||!f.isConnected)return;
+    var w=SC.Widget(f);EMB.sc=w;
+    function info(){try{w.getCurrentSound(function(x){if(x&&my===EMB.tok){EMB.live={title:x.title,thumb:x.artwork_url||''};embRender()}})}catch(e){}}
+    w.bind(SC.Widget.Events.READY,info);
+    w.bind(SC.Widget.Events.PLAY,function(){EMB.paused=false;info();embRender()});
+    w.bind(SC.Widget.Events.PAUSE,function(){EMB.paused=true;embRender()});
+    w.bind(SC.Widget.Events.FINISH,function(){EMB.paused=true;embRender();embAdvance()});
+  });
+}
+function embTeardown(){
+  EMB.tok++;clearTimeout(EMB.tm);
+  if(EMB.ctl){try{EMB.ctl.pause()}catch(e){}try{EMB.ctl.destroy()}catch(e){}}
+  if(EMB.yt){try{EMB.yt.pauseVideo()}catch(e){}try{EMB.yt.destroy()}catch(e){}}
+  if(EMB.sc){try{EMB.sc.pause()}catch(e){}}
+  EMB.ctl=null;EMB.yt=null;EMB.sc=null;EMB.live=null;EMB.prov=null;EMB.loading=false;EMB.paused=true;
+  var w=$('#spWrap');if(w)w.innerHTML='';
+}
+function embAct(k){
+  var q=state.set.spQ||[],c=embCur();if(!c)return;var p=c.p||'spotify';
+  if(k==='play'){
+    if(p==='spotify'&&EMB.ctl)EMB.ctl.togglePlay();
+    else if(p==='yt'&&EMB.yt){if(EMB.paused)EMB.yt.playVideo();else EMB.yt.pauseVideo()}
+    else if(p==='sc'&&EMB.sc)EMB.sc.toggle();
+    else if(EMB.loading)toast('Le lecteur se charge…',2500);
+    else if(p==='spotify'||p==='yt'||p==='sc')toast('Ce lecteur ne se commande que depuis son propre bouton lecture.',4500);
+    else toast('Pour ce service, utilisez le bouton lecture du lecteur affiché.',4500);
+    return;
+  }
+  if(p==='yt'&&EMB.yt&&c.type==='playlist'){if(k==='next')EMB.yt.nextVideo();else EMB.yt.previousVideo();return}
+  if(p==='sc'&&EMB.sc&&c.type==='set'){if(k==='next')EMB.sc.next();else EMB.sc.prev();return}
+  if(q.length<2){
+    if(k==='prev'){try{if(p==='spotify'&&EMB.ctl)EMB.ctl.seek(0);else if(p==='yt'&&EMB.yt)EMB.yt.seekTo(0);else if(p==='sc'&&EMB.sc)EMB.sc.seekTo(0)}catch(e){}}
+    else toast('Ajoutez d\'autres liens pour passer de l\'un à l\'autre, ou utilisez les flèches du lecteur affiché.',6000);
+    return;
+  }
+  state.set.spI=(((state.set.spI||0)+(k==='next'?1:-1))%q.length+q.length)%q.length;saveSet();
+  EMB.paused=true;embMount();embRender();embKick();
+}
+function embKick(){
+  var c=embCur();if(c&&(c.p||'spotify')==='spotify')setTimeout(function(){try{if(EMB.ctl)EMB.ctl.play()}catch(e){}},800);
+}
+function embAdd(o,now){
+  var q=state.set.spQ||(state.set.spQ=[]);
+  var k=q.findIndex(function(x){return x.type===o.type&&x.id===o.id&&(x.p||'spotify')===(o.p||'spotify')});
+  if(k<0){if(q.length>=20)q.shift();q.push({p:o.p||'spotify',type:o.type,id:o.id});k=q.length-1}
+  if(o.title&&!q[k].title)q[k].title=o.title;
+  if(now||!(PL.src==='embed'&&PL.open)){state.set.spI=k;state.set.spEmbed=o;return true}
+  saveSet();embRender();return false;
+}
+function playEmbed(o,queueOnly){
+  var was=PL.open&&PL.src==='embed';
+  var go=embAdd(o,!queueOnly);
+  if(!go){return}
+  if(!RAD.au.paused)RAD.au.pause();
+  if(PL.src==='spotify'&&SP.tok)spApi('PUT','/me/player/pause');
+  state.set.audioSrc='embed';saveSet();PL.src='embed';
+  if(was){embMount();embRender();embKick()}else openPlayer(true);
+}
+function useSpotify(){
+  if(!RAD.au.paused)RAD.au.pause();
+  if(PL.src==='embed'){PL.src='spotify';openPlayer(false)}
+  PL.src='spotify';state.set.audioSrc='spotify';saveSet();openPlayer(true);
+}
+function applyAudioVis(){$('#btnMusic').hidden=!state.set.showPlayer;if(!state.set.showPlayer)openPlayer(false)}
+function toggleFav(st){
+  var f=state.set.radioFavs,i=f.findIndex(function(x){return x.id===st.id});
+  if(i>=0)f.splice(i,1);else{f.unshift({id:st.id,name:st.name,url:st.url,fav:st.fav||'',sub:st.sub||''});if(f.length>30)f.length=30}
+  saveSet();
+}
+var RB_HOSTS=['de1','de2','nl1','fi1','at1'];
+async function rbFetch(path){
+  var err=null;
+  for(var i=0;i<RB_HOSTS.length;i++){
+    try{var r=await fetch('https://'+RB_HOSTS[i]+'.api.radio-browser.info/json/'+path);if(r.ok)return await r.json()}catch(e){err=e}
+  }
+  throw err||new Error('rb');
+}
+async function rbSearch(q){
+  var j=await rbFetch('stations/search?name='+encodeURIComponent(q)+'&hidebroken=true&order=votes&reverse=true&limit=40');
+  var seen={},ok=[],other=[];
+  j.forEach(function(x){
+    var u=x.url_resolved||x.url;if(!u||seen[x.stationuuid]||x.lastcheckok===0)return;
+    seen[x.stationuuid]=1;
+    var secure=/^https:/.test(u);u=u.replace(/^http:\/\//,'https://');
+    var fav=x.favicon?x.favicon.replace(/^http:/,'https:'):'';
+    var sub=[x.country,x.bitrate?x.bitrate+' kbit/s':null,(x.tags||'').split(',')[0]].filter(Boolean).join(' · ');
+    (secure?ok:other).push({id:x.stationuuid,name:(x.name||'Radio').trim().slice(0,40),url:u,fav:fav,sub:sub});
+  });
+  return ok.concat(other).slice(0,25);
+}
+var APPS=[
+  ['YouTube','▶️','#E5322D','com.google.android.youtube','https://www.youtube.com']
+];
+var SPOTIFY_APP=['Spotify','🎧','#1DB954','com.spotify.music','https://open.spotify.com'];
+/* Android : ouvre l'application, ou le Play Store si elle n'est pas installée. Ailleurs : ouvre le site. */
+function openApp(a){
+  if(/android/i.test(navigator.userAgent))
+    location.href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package='+a[3]+';S.browser_fallback_url='+encodeURIComponent('https://play.google.com/store/apps/details?id='+a[3])+';end';
+  else window.open(a[4],'_blank','noopener');
+}
+function arow(icon,color,title,sub,onMain,rightLabel,onRight){
+  var kids=[h('span',{class:'ic',style:'--c:'+color,text:icon}),
+    h('button',{class:'stbtn',type:'button',onclick:onMain},[h('b',{text:title}),sub?h('small',{text:sub}):null])];
+  if(rightLabel)kids.push(h('button',{class:'rowact',type:'button',text:rightLabel,onclick:onRight}));
+  return h('div',{class:'lrow arow'},kids);
+}
+function stationRow(st,list,refresh){
+  var fav=state.set.radioFavs.some(function(x){return x.id===st.id});
+  var on=RAD.cur&&RAD.cur.id===st.id&&PL.src==='radio'&&RAD.playing;
+  var ic=h('span',{class:'ic',style:'--c:#1A3678',text:'📻'});
+  if(st.fav){
+    ic=h('img',{class:'sticon',src:st.fav,alt:'',width:'44',height:'44',loading:'lazy'});
+    ic.addEventListener('error',function(){ic.replaceWith(h('span',{class:'ic',style:'--c:#1A3678',text:'📻'}))});
+  }
+  var main=h('button',{class:'stbtn',type:'button',onclick:function(){playStation(st,list);if(refresh)refresh()}},[h('b',{text:st.name}),h('small',{text:(on?'▶ En lecture · ':'')+(st.sub||'Radio en direct')})]);
+  var star=h('button',{class:'starbtn',type:'button','aria-label':fav?'Retirer des favoris':'Ajouter aux favoris','aria-pressed':String(fav),text:fav?'★':'☆',onclick:function(){toggleFav(st);if(refresh)refresh()}});
+  return h('div',{class:'lrow arow'},[ic,main,star]);
+}
+
+/* ---------- Comptes ---------- */
+function acct(){return ACCTS.find(function(a){return a.id===SESSION})||null}
+function saveAccts(){save('accounts',ACCTS)}
+function flash(m){try{sessionStorage.setItem('cap.flash',m)}catch(e){}}
+function cryptoOk(){return !!(window.crypto&&crypto.subtle)}
+function bufB64(buf){var t='';new Uint8Array(buf).forEach(function(x){t+=String.fromCharCode(x)});return btoa(t)}
+function b64Buf(x){var t=atob(x),u=new Uint8Array(t.length);for(var i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u}
+async function hashPw(pw,salt){
+  var key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
+  var bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:b64Buf(salt),iterations:150000,hash:'SHA-256'},key,256);
+  return bufB64(bits);
+}
+async function checkPw(a,pw){return (await hashPw(pw,a.salt))===a.hash}
+var authFails=0,authLock=0;
+var RE_USER=/^[a-z0-9_.-]{3,20}$/;
+async function doRegister(v){
+  var user=v.user.trim().toLowerCase();
+  if(!RE_USER.test(user))return 'Identifiant : 3 à 20 caractères (lettres, chiffres, point, tiret).';
+  if(ACCTS.some(function(a){return a.username===user}))return 'Cet identifiant est déjà utilisé sur cet appareil.';
+  if(v.pw.length<8)return 'Mot de passe : 8 caractères minimum.';
+  if(v.pw!==v.pw2)return 'Les deux mots de passe sont différents.';
+  if(!cryptoOk())return 'Création impossible : ouvrez Cap avec une adresse https.';
+  var salt=bufB64(crypto.getRandomValues(new Uint8Array(16)));
+  var hv=await hashPw(v.pw,salt);
+  var id='a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  ACCTS.push({id:id,username:user,salt:salt,hash:hv,created:Date.now()});saveAccts();
+  /* les données de l'invité sont copiées dans le nouveau compte */
+  ['places','recent','set','voice'].forEach(function(k){try{var x=localStorage.getItem('cap.'+k);if(x!=null)localStorage.setItem('cap.u.'+id+'.'+k,x)}catch(e){}});
+  var np=Object.assign({},PROF,{name:(v.disp.trim()||user).slice(0,24),since:Date.now(),badges:Object.assign({},PROF.badges)});
+  try{localStorage.setItem('cap.u.'+id+'.profile',JSON.stringify(np))}catch(e){}
+  save('session',id);flash('Compte créé. Bienvenue !');location.reload();return null;
+}
+async function doLogin(v){
+  if(Date.now()<authLock)return 'Trop d\'essais. Réessayez dans '+Math.ceil((authLock-Date.now())/1000)+' s.';
+  if(!cryptoOk())return 'Connexion impossible : ouvrez Cap avec une adresse https.';
+  var user=v.user.trim().toLowerCase(),a=ACCTS.find(function(x){return x.username===user});
+  var hv=await hashPw(v.pw,a?a.salt:bufB64(new Uint8Array(16)));
+  if(!a||hv!==a.hash){authFails++;if(authFails>=5){authLock=Date.now()+30000;authFails=0}return 'Identifiant ou mot de passe incorrect.'}
+  authFails=0;save('session',a.id);flash('Connexion réussie');location.reload();return null;
+}
+function doLogout(){save('session',null);flash('Vous êtes déconnecté');location.reload()}
+async function doChPw(v){
+  var a=acct();if(!a)return 'Vous n\'êtes pas connecté.';
+  if(!cryptoOk())return 'Ouvrez Cap avec une adresse https.';
+  if(!(await checkPw(a,v.cur)))return 'Mot de passe actuel incorrect.';
+  if(v.n1.length<8)return 'Nouveau mot de passe : 8 caractères minimum.';
+  if(v.n1!==v.n2)return 'Les deux nouveaux mots de passe sont différents.';
+  a.salt=bufB64(crypto.getRandomValues(new Uint8Array(16)));a.hash=await hashPw(v.n1,a.salt);saveAccts();
+  closePanel();toast('Mot de passe modifié');return null;
+}
+async function doChUser(v){
+  var a=acct();if(!a)return 'Vous n\'êtes pas connecté.';
+  var nu=v.user.trim().toLowerCase();
+  if(!RE_USER.test(nu))return 'Identifiant : 3 à 20 caractères (lettres, chiffres, point, tiret).';
+  if(nu!==a.username&&ACCTS.some(function(x){return x.username===nu}))return 'Cet identifiant est déjà utilisé.';
+  if(!cryptoOk())return 'Ouvrez Cap avec une adresse https.';
+  if(!(await checkPw(a,v.pw)))return 'Mot de passe incorrect.';
+  a.username=nu;saveAccts();closePanel();toast('Identifiant modifié');return null;
+}
+async function doDelete(v){
+  var a=acct();if(!a)return 'Vous n\'êtes pas connecté.';
+  if(!cryptoOk())return 'Ouvrez Cap avec une adresse https.';
+  if(!(await checkPw(a,v.pw)))return 'Mot de passe incorrect.';
+  var pre='cap.u.'+a.id+'.',del=[];
+  for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(pre)===0)del.push(k)}
+  del.forEach(function(k){localStorage.removeItem(k)});
+  ACCTS=ACCTS.filter(function(x){return x.id!==a.id});saveAccts();save('session',null);
+  flash('Compte supprimé');location.reload();return null;
+}
+function exportAcct(){
+  var a=acct();if(!a)return;
+  var pre='cap.u.'+a.id+'.',data={};
+  for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);
+    if(k&&k.indexOf(pre)===0){var n=k.slice(pre.length);if(n!=='sp_tok'&&n!=='sp_open')data[n]=localStorage.getItem(k)}}
+  var blob=new Blob([JSON.stringify({cap:1,account:a,data:data},null,1)],{type:'application/json'});
+  var url=URL.createObjectURL(blob),el=document.createElement('a');
+  el.href=url;el.download='cap-'+a.username+'.json';document.body.appendChild(el);el.click();el.remove();
+  setTimeout(function(){URL.revokeObjectURL(url)},4000);toast('Fichier exporté');
+}
+function pickImport(){
+  var inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';
+  inp.addEventListener('change',function(){
+    var f=inp.files&&inp.files[0];if(!f)return;
+    if(f.size>1e6){toast('Fichier trop volumineux.',4000);return}
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{
+        var o=JSON.parse(rd.result),a=o&&o.account;
+        if(!o||o.cap!==1||!a||!/^a[a-z0-9]{3,20}$/.test(a.id||'')||!RE_USER.test(a.username||'')||typeof a.salt!=='string'||typeof a.hash!=='string'||!o.data)throw 0;
+        if(ACCTS.some(function(x){return x.id===a.id||x.username===a.username})){toast('Ce compte existe déjà sur cet appareil.',5000);return}
+        var okk=['profile','places','recent','set','voice'],pairs=[];
+        okk.forEach(function(k){if(typeof o.data[k]==='string'){JSON.parse(o.data[k]);pairs.push([k,o.data[k]])}});
+        pairs.forEach(function(p){localStorage.setItem('cap.u.'+a.id+'.'+p[0],p[1])});
+        ACCTS.push({id:a.id,username:a.username,salt:a.salt,hash:a.hash,created:+a.created||Date.now()});saveAccts();
+        toast('Compte importé. Connectez-vous.',4000);stack=[];openPanel('auth','login');
+      }catch(e){toast('Fichier de compte invalide.',5000)}
+    };
+    rd.readAsText(f);
+  });
+  inp.click();
+}
+function avatarEl(sz){return h('div',{class:'av',style:'width:'+sz+'px;height:'+sz+'px;background:'+PROF.color+';font-size:'+Math.round(sz*.52)+'px',text:PROF.avatar})}
+function formPage(spec){
+  var f=h('form',{novalidate:'novalidate'}),els={};
+  spec.fields.forEach(function(fd){
+    f.appendChild(h('label',{class:'flabel',for:fd.id,text:fd.label}));
+    var inp=h('input',{class:'field',id:fd.id,type:fd.type||'text',autocomplete:fd.auto||'off',autocapitalize:'none',spellcheck:'false',maxlength:String(fd.max||64)});
+    if(fd.val)inp.value=fd.val;
+    els[fd.key]=inp;
+    if(fd.type==='password'){
+      f.appendChild(h('div',{class:'pwrap'},[inp,h('button',{type:'button',class:'pwshow',text:'Afficher',onclick:function(){var sh=inp.type==='password';inp.type=sh?'text':'password';this.textContent=sh?'Masquer':'Afficher'}})]));
+    }else f.appendChild(inp);
+  });
+  var err=h('div',{class:'ferr',role:'alert'});f.appendChild(err);
+  var sb=h('button',{class:'btn '+(spec.cls||'primary'),type:'submit',style:'width:100%',text:spec.submit});f.appendChild(sb);
+  f.addEventListener('submit',async function(e){
+    e.preventDefault();err.textContent='';sb.disabled=true;sb.textContent='Un instant…';
+    var vals={};for(var k in els)vals[k]=els[k].value;
+    var r=null;try{r=await spec.run(vals)}catch(x){r='Une erreur est survenue. Réessayez.'}
+    if(r)err.textContent=r;
+    sb.disabled=false;sb.textContent=spec.submit;
+  });
+  return f;
+}
+
+/* ---------- Panneaux ---------- */
+var stack=[],closeTok=0;
+function openPanel(name,arg){stack.push({name:name,arg:arg});renderPanel('fwd')}
+function closePanel(){
+  stack=[];var pn=$('#panel');if(pn.hidden)return;
+  var tk=++closeTok;pn.classList.add('out');$('#scrim').classList.add('out');
+  setTimeout(function(){if(tk!==closeTok)return;pn.hidden=true;$('#scrim').hidden=true;pn.classList.remove('out');$('#scrim').classList.remove('out')},220);
+}
+function backPanel(){stack.pop();if(stack.length)renderPanel('back');else closePanel()}
+function renderPanel(dir){
+  closeTok++;$('#panel').classList.remove('out');$('#scrim').classList.remove('out');
+  var cur=stack[stack.length-1],P=PAGES[cur.name](cur.arg);
+  $('#panTitle').textContent=P.title;
+  $('#panBack').style.visibility=(stack.length>1)?'visible':'hidden';
+  var b=$('#panBody');b.innerHTML='';b.appendChild(P.body);b.scrollTop=0;
+  b.classList.remove('pi','pb');void b.offsetWidth;b.classList.add(dir==='back'?'pb':'pi');
+  $('#panel').hidden=false;$('#scrim').hidden=false;
+}
+$('#panBack').addEventListener('click',backPanel);
+$('#panClose').addEventListener('click',closePanel);
+$('#scrim').addEventListener('click',closePanel);
+$('#btnMenu').addEventListener('click',function(){stack=[];openPanel('menu')});
+/* Bouton musique : le lecteur s'ouvre ou se ferme s'il est affiché ou si de la musique joue ; sinon la page Lecteur audio s'affiche. */
+$('#btnMusic').addEventListener('click',function(){
+  var playing=(PL.src==='radio'&&RAD.playing)||(PL.src==='spotify'&&!!SP.tok&&SP.playing);
+  if(PL.open)openPlayer(false);
+  else if(playing)openPlayer(true);
+  else{stack=[];openPanel('music')}
+});
+$('#btnReport').addEventListener('click',function(){stack=[];openPanel('report')});
+
+function toggleRow(label,sub,get,set){
+  var on=get();
+  var b=h('button',{class:'lrow',type:'button',role:'switch','aria-checked':String(on)},[
+    h('span',{class:'lt'},[h('b',{text:label}),sub?h('small',{text:sub}):null]),
+    h('span',{class:'switch'})
+  ]);
+  b.addEventListener('click',function(){var v=!(b.getAttribute('aria-checked')==='true');b.setAttribute('aria-checked',String(v));set(v)});
+  return b;
+}
+function radioRow(label,checked,onclick){
+  return h('button',{class:'lrow',type:'button',role:'radio','aria-checked':String(checked),onclick:onclick},[
+    h('span',{class:'lt'},[h('b',{text:label})]),h('span',{class:'radio'})
+  ]);
+}
+
+var PAGES={
+  menu:function(){
+    var b=h('div'),L=levelInfo(),a=acct();
+    var pct=L.next?Math.min(100,Math.round((L.p-L.from)/(L.next-L.from)*100)):100;
+    b.appendChild(h('div',{class:'mhead'},[avatarEl(76),h('div',{class:'mt'},[
+      h('b',{text:dispName()}),h('span',{text:L.name+' · '+L.p+' pts'+(a?' · @'+a.username:' · invité')}),
+      h('div',{class:'pbar'},[h('i',{style:'width:'+pct+'%'})])])]));
+    if(!a)b.appendChild(h('button',{class:'btn primary',type:'button',style:'width:100%;margin-bottom:6px',text:'Créer un compte',onclick:function(){openPanel('auth','register')}}));
+    b.appendChild(rowBtn('👤','#2F6BFF','Profil',null,function(){openPanel('profile')},chevron()));
+    b.appendChild(rowBtn('🏆','#C48A1A','Prouesses',null,function(){openPanel('stats')},chevron()));
+    b.appendChild(rowBtn('🔐','#1E8FA8','Compte et connexion',null,function(){openPanel('account')},a?chevron():h('span',{class:'warnbadge',text:'!'})));
+    b.appendChild(rowBtn('🏠','#2F6BFF','Domicile et travail',null,function(){openPanel('places')},chevron()));
+    b.appendChild(rowBtn('🧭','#4C6EF5','Navigation',null,function(){openPanel('navigation')},chevron()));
+    b.appendChild(rowBtn('⚙️','#1E8FA8','Paramètres',null,function(){openPanel('settings')},chevron()));
+    b.appendChild(rowBtn('💙','#D6478F','Inviter un ami',null,shareApp,chevron()));
+    return {title:'Profil',body:b};
+  },
+  settings:function(){
+    var b=h('div');
+    b.appendChild(rowBtn('🎵','#D6478F','Lecteur audio',null,function(){openPanel('music')},chevron()));
+    b.appendChild(rowBtn('🔊','#18A9E0','Voix et son',null,function(){openPanel('voice')},chevron()));
+    b.appendChild(rowBtn('🗺️','#2DAA6B','Affichage de la carte',null,function(){openPanel('mapstyle')},chevron()));
+    b.appendChild(rowBtn('🔔','#F28C1E','Alertes',null,function(){openPanel('alerts')},chevron()));
+    b.appendChild(rowBtn('🧭','#4C6EF5','Navigation',null,function(){openPanel('navigation')},chevron()));
+    b.appendChild(rowBtn('ℹ️','#18A9E0','À propos',null,function(){openPanel('about')},chevron()));
+    return {title:'Paramètres',body:b};
+  },
+  voice:function(){
+    var b=h('div'),rows=[];
+    function mk(v,label){var r=radioRow(label,state.voice===v,function(){setVoice(v);rows.forEach(function(x){x[0].setAttribute('aria-checked',String(x[1]===state.voice))})});rows.push([r,v]);b.appendChild(r)}
+    mk('all','Voix et alertes');mk('alerts','Alertes seules');mk('mute','Muet');
+    b.appendChild(h('div',{class:'mlabel',text:'Volume de la voix'}));
+    var rg=h('input',{type:'range',min:'0',max:'1',step:'0.1',value:String(state.set.vol),'aria-label':'Volume'});
+    rg.addEventListener('input',function(){state.set.vol=parseFloat(rg.value);saveSet()});
+    b.appendChild(rg);
+    b.appendChild(h('div',{style:'padding-top:8px'},[h('button',{class:'btn ghost',type:'button',style:'width:100%',onclick:function(){unlockSpeech();var v=state.voice;state.voice='all';say('Dans deux cent mètres, tournez à droite',{interrupt:true});state.voice=v}},['Tester la voix'])]));
+    return {title:'Voix et son',body:b};
+  },
+  mapstyle:function(){
+    var b=h('div'),rows=[];
+    b.appendChild(h('div',{class:'help',id:'mapNow',text:'Actuellement : '+(mapStyleNow()==='day'?'carte claire':'carte sombre')+'.'}));
+    function mk(v,label,sub){
+      var r=h('button',{class:'lrow',type:'button',role:'radio','aria-checked':String(state.set.mapMode===v)},[
+        h('span',{class:'lt'},[h('b',{text:label}),sub?h('small',{text:sub}):null]),h('span',{class:'radio'})]);
+      r.addEventListener('click',function(){
+        state.set.mapMode=v;saveSet();applyMap();
+        rows.forEach(function(x){x[0].setAttribute('aria-checked',String(x[1]===v))});
+        var n=$('#mapNow');if(n)n.textContent='Actuellement : '+(mapStyleNow()==='day'?'carte claire':'carte sombre')+'.';
+      });
+      rows.push([r,v]);b.appendChild(r);
+    }
+    mk('auto','Automatique','Claire de jour, sombre la nuit, selon le lever et le coucher du soleil');
+    mk('day','Toujours claire');mk('night','Toujours sombre');
+    b.appendChild(toggleRow('Afficher les alertes sur la carte',null,function(){return state.set.showAlerts},function(v){state.set.showAlerts=v;saveSet();if(v)alertLayer.addTo(map);else map.removeLayer(alertLayer)}));
+    return {title:'Affichage de la carte',body:b};
+  },
+  alerts:function(){
+    var b=h('div');
+    b.appendChild(h('div',{class:'help',html:'Alertes partagées : <span id="netStat">'+(NET.ok?'Connecté':'Hors ligne')+'</span>. Les alertes que vous ajoutez sont vues par les autres conducteurs de la zone, qui confirment si elles sont toujours là.'}));
+    var gi=h('input',{class:'field',id:'grpInput',type:'text',maxlength:'20',autocapitalize:'none',autocomplete:'off',placeholder:'Code de groupe (facultatif)','aria-label':'Code de groupe',value:state.set.group||''});
+    gi.addEventListener('change',function(){
+      var v=gi.value.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,20);gi.value=v;
+      state.set.group=v;saveSet();netConnect(true);drawAlerts();
+      toast(v?'Groupe privé « '+v+' » activé':'Alertes ouvertes à tous les conducteurs');
+    });
+    b.appendChild(gi);
+    b.appendChild(h('div',{class:'help',text:'Avec un code, seules les personnes qui saisissent le même code voient vos alertes. Sans code, tous les utilisateurs de Cap les voient.'}));
+    b.appendChild(h('div',{class:'mlabel',text:'Alertes annoncées à l\'approche'}));
+    Object.keys(TYPES).forEach(function(k){
+      var T=TYPES[k];if(!T.alert)return;
+      b.appendChild(toggleRow(T.emoji+'  '+T.label,null,function(){return !state.set.alertOff[k]},function(v){if(v)delete state.set.alertOff[k];else state.set.alertOff[k]=true;saveSet()}));
+    });
+    b.appendChild(toggleRow('Vibration à l\'approche d\'une alerte',null,function(){return state.set.vibrate},function(v){state.set.vibrate=v;saveSet()}));
+    var clr=h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:14px',text:'Vider les alertes de cet appareil'});
+    var armed=false;
+    clr.addEventListener('click',function(){
+      if(!armed){armed=true;clr.textContent='Confirmer l\'effacement';return}
+      state.alerts=[];save('alerts',state.alerts);drawAlerts();armed=false;clr.textContent='Alertes vidées';
+    });
+    b.appendChild(clr);
+    return {title:'Alertes',body:b};
+  },
+  navigation:function(){
+    var b=h('div');
+    var VEH=[['moto','🏍️','Moto','Profitez d\'itinéraires adaptés aux motos'],['car','🚗','Particulier','Pour les véhicules sans restriction particulière'],['taxi','🚕','Taxi','Profitez d\'itinéraires adaptés aux taxis']];
+    var car=h('div',{class:'vcar',role:'radiogroup','aria-label':'Type de véhicule'}),bubble=h('div',{class:'vbubble'}),cards=[];
+    function paint(){
+      cards.forEach(function(c){c.el.setAttribute('aria-checked',String(c.id===PROF.vehicle))});
+      bubble.textContent=VEH.find(function(v){return v[0]===PROF.vehicle})[3];
+    }
+    function pick(id,pop){
+      if(PROF.vehicle===id)return;
+      PROF.vehicle=id;saveProf();paint();
+      if(pop){var c=cards.find(function(x){return x.id===id}).el;c.classList.remove('pop');void c.offsetWidth;c.classList.add('pop')}
+    }
+    function center(el,smooth){car.scrollTo({left:el.offsetLeft-(car.clientWidth-el.offsetWidth)/2,behavior:smooth?'smooth':'auto'})}
+    VEH.forEach(function(v){
+      var el=h('button',{class:'vcard',type:'button',role:'radio'},[h('span',{class:'vem',text:v[1]}),h('span',{class:'vname',text:v[2]})]);
+      el.addEventListener('click',function(){pick(v[0],true);center(el,true)});
+      cards.push({id:v[0],el:el});car.appendChild(el);
+    });
+    var st=null;
+    car.addEventListener('scroll',function(){
+      clearTimeout(st);
+      st=setTimeout(function(){
+        var mid=car.scrollLeft+car.clientWidth/2,best=null,bd=1e9;
+        cards.forEach(function(c){var d=Math.abs(c.el.offsetLeft+c.el.offsetWidth/2-mid);if(d<bd){bd=d;best=c}});
+        if(best)pick(best.id,true);
+      },110);
+    });
+    b.appendChild(car);b.appendChild(bubble);paint();
+    setTimeout(function(){var c=cards.find(function(x){return x.id===PROF.vehicle});if(c)center(c.el,false)},30);
+    b.appendChild(rowBtn('⛽','#2DAA6B','Carburant préféré',PROF.fuel,function(){openPanel('fuelpick')}));
+    b.appendChild(rowBtn('🎟️','#4A4F5C','Pass péage et covoiturage',null,function(){openPanel('passes')}));
+    b.appendChild(toggleRow('Éviter les routes à péage',null,function(){return PROF.avoidTolls},function(v){PROF.avoidTolls=v;saveProf()}));
+    b.appendChild(rowBtn('✨','#1E8FA8','Plus d\'options',null,function(){openPanel('moreopts')}));
+    b.appendChild(h('div',{class:'okbar'},[h('button',{class:'btn primary',type:'button',style:'width:100%',text:'OK',onclick:closePanel})]));
+    return {title:'Navigation',body:b};
+  },
+  fuelpick:function(){
+    var b=h('div'),rows=[];
+    ['Super 95','Super 98','Diesel','GPL','Électrique'].forEach(function(f){
+      var r=radioRow(f,PROF.fuel===f,function(){PROF.fuel=f;saveProf();rows.forEach(function(x){x[0].setAttribute('aria-checked',String(x[1]===f))})});
+      rows.push([r,f]);b.appendChild(r);
+    });
+    return {title:'Carburant préféré',body:b};
+  },
+  passes:function(){
+    var b=h('div');
+    b.appendChild(toggleRow('J\'ai un badge de télépéage','Pour mémoire, sans effet sur l\'itinéraire',function(){return PROF.pass},function(v){PROF.pass=v;saveProf()}));
+    b.appendChild(toggleRow('Je pratique le covoiturage','Pour mémoire, sans effet sur l\'itinéraire',function(){return PROF.carpool},function(v){PROF.carpool=v;saveProf()}));
+    return {title:'Pass péage et covoiturage',body:b};
+  },
+  moreopts:function(){
+    var b=h('div');
+    b.appendChild(toggleRow('Éviter les autoroutes',null,function(){return PROF.avoidHighways},function(v){PROF.avoidHighways=v;saveProf()}));
+    b.appendChild(toggleRow('Éviter les ferries',null,function(){return PROF.avoidFerries},function(v){PROF.avoidFerries=v;saveProf()}));
+    b.appendChild(toggleRow('Recalcul automatique','Si vous quittez l\'itinéraire',function(){return state.set.autoReroute},function(v){state.set.autoReroute=v;saveSet()}));
+    b.appendChild(toggleRow('Garder l\'écran allumé','Pendant le guidage',function(){return state.set.keepAwake},function(v){state.set.keepAwake=v;saveSet()}));
+    return {title:'Plus d\'options',body:b};
+  },
+  profile:function(){
+    var b=h('div'),prev=h('div',{style:'display:flex;justify-content:center;padding:6px 0 4px'});
+    function drawPrev(){prev.innerHTML='';prev.appendChild(avatarEl(96))}
+    drawPrev();b.appendChild(prev);
+    b.appendChild(h('label',{class:'flabel',for:'pfName',text:'Nom affiché'}));
+    var nm=h('input',{class:'field',id:'pfName',type:'text',maxlength:'24',autocomplete:'off',placeholder:SESSION?'Votre nom':'Conducteur invité'});
+    nm.value=PROF.name||'';
+    nm.addEventListener('change',function(){PROF.name=nm.value.trim().slice(0,24);saveProf();toast('Nom enregistré',1800)});
+    b.appendChild(nm);
+    b.appendChild(h('div',{class:'msec',text:'Avatar'}));
+    var ag=h('div',{class:'avgrid'});
+    ['😀','😎','🤠','🥳','😴','🤓','😤','🦊','🐼','🐯','🦁','🐸','🚀','⚡','🔥','🌟'].forEach(function(e){
+      var bt=h('button',{type:'button','aria-label':'Avatar '+e,'aria-pressed':String(PROF.avatar===e),text:e});
+      bt.addEventListener('click',function(){PROF.avatar=e;saveProf();drawPrev();ag.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===bt))})});
+      ag.appendChild(bt);
+    });
+    b.appendChild(ag);
+    b.appendChild(h('div',{class:'msec',text:'Couleur'}));
+    var cg=h('div',{class:'avgrid'});
+    ['#4C86FF','#2DAA6B','#F28C1E','#D6478F','#8A4DFF','#18A9E0','#E5484D','#8FA6D9'].forEach(function(c){
+      var bt=h('button',{type:'button','aria-label':'Couleur '+c,'aria-pressed':String(PROF.color===c),style:'background:'+c});
+      bt.addEventListener('click',function(){PROF.color=c;saveProf();drawPrev();cg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===bt))})});
+      cg.appendChild(bt);
+    });
+    b.appendChild(cg);
+    b.appendChild(toggleRow('Afficher mon nom sur mes alertes','Les autres conducteurs voient « par '+(PROF.name||'votre nom')+' »',function(){return PROF.showName},function(v){PROF.showName=v;saveProf()}));
+    return {title:'Profil',body:b};
+  },
+  stats:function(){
+    var b=h('div'),L=levelInfo(),t=PROF.stats;
+    var pct=L.next?Math.min(100,Math.round((L.p-L.from)/(L.next-L.from)*100)):100;
+    b.appendChild(h('div',{class:'mhead'},[avatarEl(64),h('div',{class:'mt'},[
+      h('b',{text:L.name}),h('span',{text:L.p+' points'+(L.next?' · prochain niveau à '+L.next:' · niveau maximum')}),
+      h('div',{class:'pbar'},[h('i',{style:'width:'+pct+'%'})])])]));
+    var tiles=h('div',{class:'tiles'});
+    [[fmtKm(t.m),'Distance parcourue'],[String(t.trips),'Trajets guidés'],[String(t.reports),'Signalements'],[String(t.confirms),'Confirmations']].forEach(function(x){
+      tiles.appendChild(h('div',{class:'tile'},[h('b',{text:x[0]}),h('span',{text:x[1]})]));
+    });
+    b.appendChild(tiles);
+    b.appendChild(h('div',{class:'msec',text:'Prouesses'}));
+    var g=h('div',{class:'badges'});
+    BADGES.forEach(function(bd){
+      var got=!!PROF.badges[bd[0]]||bd[4](t);
+      g.appendChild(h('div',{class:'badge'+(got?'':' lock')},[h('span',{class:'circ',text:bd[1]}),h('span',{text:bd[2]}),h('small',{text:bd[3]})]));
+    });
+    b.appendChild(g);
+    return {title:'Prouesses',body:b};
+  },
+  account:function(){
+    var a=acct(),b=h('div');
+    if(!a){
+      b.appendChild(h('div',{class:'mhead'},[avatarEl(64),h('div',{class:'mt'},[h('b',{text:'Invité'}),h('span',{text:'Aucun compte connecté'})])]));
+      b.appendChild(h('div',{class:'help',html:'Avec un compte, vos lieux, vos réglages, vos statistiques et votre association Spotify sont séparés de ceux des autres personnes qui utilisent cet appareil. Vos données d\'invité sont copiées dans le nouveau compte.'}));
+      b.appendChild(h('button',{class:'btn primary',type:'button',style:'width:100%',text:'Créer un compte',onclick:function(){openPanel('auth','register')}}));
+      b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:10px',text:'Se connecter',onclick:function(){openPanel('auth','login')}}));
+      b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:10px',text:'Importer un compte (fichier)',onclick:pickImport}));
+    }else{
+      b.appendChild(h('div',{class:'mhead'},[avatarEl(64),h('div',{class:'mt'},[h('b',{text:dispName()}),h('span',{text:'@'+a.username+' · créé le '+new Date(a.created).toLocaleDateString('fr-BE')})])]));
+      b.appendChild(rowBtn('🔑','#2F6BFF','Changer le mot de passe',null,function(){openPanel('chpass')},chevron()));
+      b.appendChild(rowBtn('🏷️','#1E8FA8','Changer l\'identifiant','@'+a.username,function(){openPanel('chuser')},chevron()));
+      b.appendChild(rowBtn('📤','#2DAA6B','Exporter mes données','Sauvegarde ou transfert vers un autre appareil',exportAcct));
+      b.appendChild(rowBtn('🚪','#4A4F5C','Se déconnecter',null,doLogout));
+      b.appendChild(rowBtn('🗑️','#FF6B6B','Supprimer mon compte',null,function(){openPanel('delacct')},chevron()));
+    }
+    b.appendChild(h('div',{class:'help',text:'Un compte Cap est enregistré sur cet appareil, pas sur un serveur. Il n\'existe donc pas de récupération par e-mail : notez votre mot de passe et exportez vos données pour les garder en sécurité.'}));
+    return {title:'Compte et connexion',body:b};
+  },
+  auth:function(mode){
+    var reg=mode==='register',b=h('div');
+    function go(m){stack[stack.length-1].arg=m;renderPanel('fwd')}
+    b.appendChild(h('div',{class:'seg',role:'tablist'},[
+      h('button',{type:'button',role:'tab','aria-selected':String(!reg),text:'Connexion',onclick:function(){go('login')}}),
+      h('button',{type:'button',role:'tab','aria-selected':String(reg),text:'Inscription',onclick:function(){go('register')}})
+    ]));
+    if(reg){
+      b.appendChild(formPage({submit:'Créer mon compte',run:doRegister,fields:[
+        {key:'user',id:'rgUser',label:'Identifiant',auto:'username',max:20},
+        {key:'disp',id:'rgDisp',label:'Nom affiché (facultatif)',auto:'nickname',max:24},
+        {key:'pw',id:'rgPw',label:'Mot de passe (8 caractères minimum)',type:'password',auto:'new-password'},
+        {key:'pw2',id:'rgPw2',label:'Confirmer le mot de passe',type:'password',auto:'new-password'}]}));
+    }else{
+      b.appendChild(formPage({submit:'Se connecter',run:doLogin,fields:[
+        {key:'user',id:'lgUser',label:'Identifiant',auto:'username',max:20},
+        {key:'pw',id:'lgPw',label:'Mot de passe',type:'password',auto:'current-password'}]}));
+      b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:10px',text:'Importer un compte (fichier)',onclick:pickImport}));
+    }
+    return {title:reg?'Créer un compte':'Connexion',body:b};
+  },
+  chpass:function(){
+    return {title:'Mot de passe',body:formPage({submit:'Enregistrer',run:doChPw,fields:[
+      {key:'cur',id:'cpCur',label:'Mot de passe actuel',type:'password',auto:'current-password'},
+      {key:'n1',id:'cpN1',label:'Nouveau mot de passe',type:'password',auto:'new-password'},
+      {key:'n2',id:'cpN2',label:'Confirmer le nouveau mot de passe',type:'password',auto:'new-password'}]})};
+  },
+  chuser:function(){
+    var a=acct();
+    return {title:'Identifiant',body:formPage({submit:'Enregistrer',run:doChUser,fields:[
+      {key:'user',id:'cuUser',label:'Nouvel identifiant',auto:'username',max:20,val:a?a.username:''},
+      {key:'pw',id:'cuPw',label:'Mot de passe',type:'password',auto:'current-password'}]})};
+  },
+  delacct:function(){
+    var b=h('div');
+    b.appendChild(h('div',{class:'help',text:'Cette action efface définitivement ce compte et toutes ses données sur cet appareil : profil, statistiques, lieux, réglages et association Spotify. Exportez vos données avant si vous voulez les garder.'}));
+    b.appendChild(formPage({submit:'Supprimer définitivement',cls:'danger',run:doDelete,fields:[
+      {key:'pw',id:'dlPw',label:'Mot de passe pour confirmer',type:'password',auto:'current-password'}]}));
+    return {title:'Supprimer le compte',body:b};
+  },
+  about:function(){
+    var b=h('div');
+    b.appendChild(h('div',{class:'help',html:'<b>Cap 3.0</b><br>Fond de carte © contributeurs OpenStreetMap. Itinéraires par OSRM. Recherche d\'adresses par Nominatim. Radios : radio-browser.info.<br><br>Les temps de trajet ne tiennent pas compte du trafic. Les comptes et les profils sont enregistrés sur cet appareil. Les alertes sont partagées entre conducteurs par le service ouvert ntfy.sh. Elles sont publiques, sans modération, et restent visibles tant que des conducteurs les confirment.'}));
+    return {title:'À propos',body:b};
+  },
+  music:function(){
+    var b=h('div');
+    b.appendChild(toggleRow('Afficher sur la carte',null,function(){return state.set.showPlayer},function(v){state.set.showPlayer=v;saveSet();applyAudioVis()}));
+    b.appendChild(toggleRow('Afficher la chanson suivante',null,function(){return state.set.showNext},function(v){state.set.showNext=v;saveSet();spLastId=null;if(PL.open){if(PL.src==='radio')plRender();else spRefresh()}}));
+    b.appendChild(h('div',{class:'help',text:'Découvrez quelle est la prochaine chanson.'}));
+    b.appendChild(toggleRow('Afficher la vidéo YouTube',null,function(){return state.set.showVideo!==false},function(v){state.set.showVideo=v;saveSet();applyVideoVis()}));
+    b.appendChild(h('div',{class:'help',text:'Désactivé, la vidéo YouTube est masquée et seul le titre reste affiché. YouTube demande que son lecteur reste visible : le son peut être coupé par le téléphone si l\'écran s\'éteint.'}));
+    b.appendChild(h('div',{class:'mlabel',text:'Applications disponibles'}));
+    var radioSub=RAD.cur?((PL.src==='radio'?'En cours : ':'Dernière écoutée : ')+RAD.cur.name):'Écoutez des radios dans Cap, sans rien installer';
+    b.appendChild(arow('🔎','#2F6BFF','Rechercher une musique','YouTube et Spotify',function(){openPanel('musicsearch')}));
+    b.appendChild(arow('📻','#1A3678','Radios en direct',radioSub,function(){openPanel('radio')}));
+    var assoc=state.set.assoc||{};
+    function appRow(a,isSp){
+      var isYt=a[0]==='YouTube';
+      var done=isSp?!!SP.tok:isYt?!!ytKey():!!assoc[a[0]];
+      var sub=isSp?(SP.tok?(PL.src==='spotify'?'Associé · utilisé':'Associé'):''):(done?'Associé':'');
+      var main=function(){
+        if(isSp&&SP.tok){useSpotify();closePanel();toast('Spotify sélectionné',2500)}
+        else if(done)openPanel(isYt?'musicsearch':'spembed');
+        else openPanel('assoc',a[0]);
+      };
+      return arow(a[1],a[2],a[0],sub,main,done?((isSp||isYt)?null:'Ouvrir'):'Associer',done?function(){openApp(a)}:function(){openPanel('assoc',a[0])});
+    }
+    b.appendChild(appRow(SPOTIFY_APP,true));
+    APPS.forEach(function(a){b.appendChild(appRow(a,false))});
+    b.appendChild(arow('🔗','#1DB954','Lire un lien',state.set.spEmbed&&PL.src==='embed'?'En cours dans le lecteur':'Spotify, YouTube, YouTube Music, SoundCloud',function(){openPanel('spembed')}));
+    if(SP.tok||ytKey()||Object.keys(assoc).length)b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:14px',text:'Dissocier les applications',onclick:function(){
+      state.set.assoc={};if(!YOUTUBE_API_KEY)save('yt_key','');if(SP.tok){SP.tok=null;saveU('sp_tok',null);if(PL.src==='spotify'){PL.src=null;state.set.audioSrc=null}openPlayer(false)}saveSet();closePanel();toast('Applications dissociées');
+    }}));
+    b.appendChild(h('div',{class:'help',text:'« Ouvrir » lance l\'application, ou le Play Store si elle n\'est pas installée. Cap ne peut pas lire ce que jouent les autres applications : le titre en cours et les boutons précédent et suivant fonctionnent avec les radios de Cap et avec Spotify associé.'}));
+    return {title:'Lecteur audio',body:b};
+  },
+  assoc:function(name){
+    var a=name==='Spotify'?SPOTIFY_APP:APPS.filter(function(x){return x[0]===name})[0]||SPOTIFY_APP;
+    var sp=a===SPOTIFY_APP,yt=a[0]==='YouTube',b=h('div',{class:'assoc'});
+    b.appendChild(h('div',{class:'associc',style:'--c:'+a[2],text:a[1]}));
+    b.appendChild(h('div',{class:'assoct',text:'Connexion à '+a[0]}));
+    b.appendChild(h('div',{class:'help',text:yt
+      ?'Cap cherche vos musiques sur YouTube et les lit dans son lecteur, avec pause, lecture, suivant et précédent depuis Cap. Cela demande une clé API YouTube. Vous pouvez dissocier à tout moment dans Lecteur audio.'
+      :sp
+      ?'Pour une expérience optimale, Cap et Spotify échangent des données sur votre utilisation : titre en cours, lecture, pause et titre suivant. Vous pouvez dissocier à tout moment dans Lecteur audio. Spotify Premium est nécessaire pour changer de titre.'
+      :'Cap enregistre '+a[0]+' comme application audio et l\'ouvre. Cap ne peut pas lire ni commander ce que joue '+a[0]+' : utilisez ses commandes ou celles de votre casque. Vous pouvez dissocier à tout moment dans Lecteur audio.'}));
+    var cidIn=null;
+    if(sp&&!SP.cid){
+      b.appendChild(h('div',{class:'help',html:'Entrez le <b>Client ID</b> de votre application Spotify (developer.spotify.com/dashboard). Il est gardé sur cet appareil.'}));
+      cidIn=h('input',{class:'field',type:'text',placeholder:'Client ID (32 caractères)',autocomplete:'off',autocapitalize:'none',spellcheck:'false',style:'margin-bottom:14px'});
+      b.appendChild(cidIn);
+    }
+    if(yt&&!ytKey()){
+      b.appendChild(h('div',{class:'help',html:'Entrez votre <b>clé API YouTube</b> (console.cloud.google.com : « YouTube Data API v3 », puis Identifiants). Elle est gardée sur cet appareil.'}));
+      cidIn=h('input',{class:'field',type:'text',placeholder:'Clé API YouTube (commence par AIza)',autocomplete:'off',autocapitalize:'none',spellcheck:'false',style:'margin-bottom:14px'});
+      b.appendChild(cidIn);
+    }
+    b.appendChild(h('div',{class:'row'},[
+      h('button',{class:'btn ghost',type:'button',text:'Non merci',onclick:backPanel}),
+      h('button',{class:'btn primary',type:'button',text:'Accepter',onclick:function(){
+        if(sp){
+          if(cidIn){
+            var v=cidIn.value.trim();
+            if(!/^[a-f0-9]{32}$/i.test(v)){toast('Le Client ID doit contenir 32 lettres et chiffres.',5000);return}
+            save('sp_cid',v);SP.cid=v;
+          }
+          spLogin(SP.cid);return;
+        }
+        if(yt){
+          if(cidIn){
+            var k=cidIn.value.trim();
+            if(!/^AIza[0-9A-Za-z_-]{35}$/.test(k)){toast('Cette clé ne ressemble pas à une clé Google (AIza… 39 caractères).',5000);return}
+            save('yt_key',k);
+          }
+          closePanel();toast('YouTube associé',2500);openPanel('musicsearch');return;
+        }
+        var m=state.set.assoc||(state.set.assoc={});m[a[0]]=true;saveSet();
+        closePanel();toast(a[0]+' associé',2500);openApp(a);
+      }})
+    ]));
+    return {title:a[0],body:b};
+  },
+  musicsearch:function(){
+    var b=h('div');
+    var inp=h('input',{class:'field',type:'search',placeholder:'Titre, artiste, playlist…',autocomplete:'off',autocapitalize:'none',enterkeyhint:'search'});
+    var msg=h('div',{class:'help',style:'margin-top:8px'});
+    var res=h('div',{});
+    var btn=h('button',{class:'btn primary',type:'button',style:'width:100%;margin-top:10px',text:'Rechercher'});
+    b.appendChild(inp);b.appendChild(btn);b.appendChild(msg);b.appendChild(res);
+    function line(it){
+      var o={p:it.p,type:it.type,id:it.id};
+      return arow(it.p==='yt'?'▶️':'🎧',it.p==='yt'?'#E5322D':'#1DB954',it.title,(it.p==='yt'?'YouTube · ':'Spotify · ')+it.sub,function(){
+        if(it.title)o.title=it.title;
+        playEmbed(o);closePanel();toast('Lecture dans Cap',2500);
+      },'Ajouter',function(){o.title=it.title;playEmbed(o,true);toast('Ajouté à la file',2500)});
+    }
+    var MSG={nokey:'',noassoc:'',quotaExceeded:'La limite gratuite de YouTube est atteinte pour aujourd\'hui. Réessayez demain.',keyInvalid:'Clé API YouTube refusée par Google. Vérifiez-la ci-dessous.',API_KEY_INVALID:'Clé API YouTube refusée par Google. Vérifiez-la ci-dessous.',accessNotConfigured:'L\'API « YouTube Data API v3 » n\'est pas activée sur cette clé.',ipRefererBlocked:'Cette clé est limitée à un autre site que celui-ci.',forbidden:'Cette clé n\'a pas le droit d\'utiliser YouTube Data API v3.',network:'Pas de connexion à ce service.'};
+    async function go(){
+      var q=inp.value.trim();if(q.length<2){msg.textContent='Écrivez au moins 2 lettres.';return}
+      res.innerHTML='';msg.textContent='Recherche…';btn.disabled=true;
+      var r=await Promise.all([searchYouTube(q),searchSpotify(q)]);
+      btn.disabled=false;
+      var notes=[],n=0;
+      r.forEach(function(x,i){
+        if(x.items){x.items.forEach(function(it){res.appendChild(line(it));n++})}
+        else if(x.err&&x.err!=='nokey'&&x.err!=='noassoc')notes.push((i?'Spotify : ':'YouTube : ')+(MSG[x.err]||('erreur '+x.err)));
+      });
+      if(r[1].err==='noassoc')notes.push('Associez Spotify (liste du Lecteur audio) pour chercher aussi sur Spotify.');
+      if(r[0].err==='nokey')notes.push('Ajoutez une clé API YouTube ci-dessous pour chercher sur YouTube.');
+      msg.textContent=(n?n+' résultats. ':(notes.length?'':'Aucun résultat. '))+notes.join(' ');
+    }
+    btn.addEventListener('click',go);
+    inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();go()}});
+    var kb=h('div',{style:'margin-top:22px'});
+    if(!YOUTUBE_API_KEY){
+      if(ytKey()){
+        kb.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%',text:'Changer la clé API YouTube',onclick:function(){save('yt_key','');renderPanel('fwd')}}));
+      }else{
+        kb.appendChild(h('div',{class:'help',html:'Clé API YouTube (gratuite) : <b>console.cloud.google.com</b>, créez un projet, activez « YouTube Data API v3 », puis Identifiants, Créer une clé API. Elle reste sur cet appareil.'}));
+        var ki=h('input',{class:'field',type:'text',placeholder:'Clé API YouTube (commence par AIza)',autocomplete:'off',autocapitalize:'none',spellcheck:'false',style:'margin-bottom:10px'});
+        kb.appendChild(ki);
+        kb.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%',text:'Enregistrer la clé',onclick:function(){
+          var v=ki.value.trim();
+          if(!/^AIza[0-9A-Za-z_-]{35}$/.test(v)){toast('Cette clé ne ressemble pas à une clé Google (AIza… 39 caractères).',5000);return}
+          save('yt_key',v);toast('Clé enregistrée',2500);renderPanel('fwd');
+        }}));
+      }
+    }
+    b.appendChild(kb);
+    return {title:'Rechercher une musique',body:b};
+  },
+  spembed:function(){
+    var b=h('div');
+    b.appendChild(h('div',{class:'help',html:'Dans l\'application, touchez <b>Partager</b> puis <b>Copier le lien</b> sur un titre, un album ou une playlist. Collez-le ici : le lecteur s\'affiche dans Cap. Liens acceptés : <b>Spotify, YouTube et YouTube Music, SoundCloud</b>. Pause, lecture, suivant et précédent se commandent depuis Cap.'}));
+    var inp=h('input',{class:'field',id:'spLink',type:'url',placeholder:'Collez un lien Spotify, YouTube ou SoundCloud…',autocomplete:'off',autocapitalize:'none',spellcheck:'false'});
+    var err=h('div',{class:'ferr',role:'alert'});
+    function read(){
+      var t=inp.value.trim();
+      if(/spotify\.link\/|on\.soundcloud\.com/i.test(t)){err.textContent='Ce lien court ne peut pas être lu. Ouvrez-le dans le navigateur, puis copiez l\'adresse complète.';return null}
+      var o=parseLink(t);
+      if(!o){err.textContent='Lien non reconnu. Il doit venir de Spotify, YouTube, YouTube Music ou SoundCloud.';return null}
+      err.textContent='';return o;
+    }
+    function go(queueOnly){
+      var o=read();if(!o)return;
+      playEmbed(o,queueOnly);
+      if(queueOnly&&PL.src==='embed'&&PL.open){inp.value='';toast('Ajouté à la file',2500);renderPanel('fwd')}
+      else{closePanel();toast('Lecteur affiché',2500)}
+    }
+    b.appendChild(inp);b.appendChild(err);
+    b.appendChild(h('div',{class:'row'},[
+      h('button',{class:'btn ghost',type:'button',text:'Coller',onclick:function(){
+        try{navigator.clipboard.readText().then(function(x){inp.value=x;go(false)},function(){toast('Collez le lien dans le champ (appui long).',4000)})}catch(e){toast('Collez le lien dans le champ (appui long).',4000)}
+      }}),
+      h('button',{class:'btn primary',type:'button',text:'Lire dans Cap',onclick:function(){go(false)}})
+    ]));
+    b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:10px',text:'Ajouter à la file',onclick:function(){go(true)}}));
+    inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();go(false)}});
+    var q=state.set.spQ||[];
+    if(q.length){
+      b.appendChild(h('div',{class:'help',style:'margin-top:16px;font-weight:700',text:'File de lecture'}));
+      q.forEach(function(c,i){
+        var cur=PL.src==='embed'&&(state.set.spI||0)===i;
+        b.appendChild(arow(cur?'▶':'🎵','#1DB954',c.title||(EMB_TYPES[c.type]||PROV[c.p||'spotify']),PROV[c.p||'spotify']+' · '+(EMB_TYPES[c.type]||'')+(cur?' · en cours':''),function(){
+          state.set.spI=i;state.set.spEmbed={p:c.p,type:c.type,id:c.id};saveSet();
+          if(PL.src==='embed'&&PL.open){embMount();embRender();embKick();renderPanel('fwd')}
+          else{playEmbed({p:c.p,type:c.type,id:c.id});closePanel()}
+        }));
+      });
+      b.appendChild(h('button',{class:'btn ghost',type:'button',style:'width:100%;margin-top:12px',text:'Vider la file et arrêter',onclick:function(){
+        state.set.spQ=[];state.set.spI=0;state.set.spEmbed=null;if(PL.src==='embed'){PL.src=null;state.set.audioSrc=null}saveSet();openPlayer(false);closePanel();toast('Lecteur Spotify arrêté');
+      }}));
+    }
+    b.appendChild(h('div',{class:'help',text:'Si vous êtes connecté à Spotify (Premium) dans ce navigateur, les titres se jouent en entier. Sinon, seulement des extraits. La première lecture peut demander une touche directement sur le lecteur Spotify.'}));
+    return {title:'Lire un lien',body:b};
+  },
+  radio:function(){
+    var b=h('div'),favBox=h('div'),resBox=h('div'),found=[],msg='';
+    function refresh(){drawFavs();drawRes()}
+    function drawFavs(){
+      favBox.innerHTML='';
+      if(!state.set.radioFavs.length)return;
+      favBox.appendChild(h('div',{class:'mlabel',text:'Mes radios'}));
+      state.set.radioFavs.forEach(function(st){favBox.appendChild(stationRow(st,state.set.radioFavs,refresh))});
+    }
+    function drawRes(){
+      resBox.innerHTML='';
+      if(msg)resBox.appendChild(h('div',{class:'none',text:msg}));
+      if(found.length)resBox.appendChild(h('div',{class:'mlabel',text:'Résultats'}));
+      found.forEach(function(st){resBox.appendChild(stationRow(st,found,refresh))});
+    }
+    var inp=h('input',{class:'field',id:'rbQ',type:'search',autocomplete:'off',placeholder:'Chercher une radio','aria-label':'Chercher une radio',enterkeyhint:'search'});
+    async function doSearch(q){
+      q=q.trim();if(q.length<2)return;
+      msg='Recherche…';found=[];drawRes();
+      try{var j=await rbSearch(q);found=j;msg=j.length?'':'Aucune radio trouvée.'}catch(e){msg='Recherche impossible. Vérifiez votre connexion.'}
+      drawRes();
+    }
+    var form=h('form',{style:'display:flex;gap:8px;align-items:center'},[inp,h('button',{class:'btn primary',type:'submit',style:'flex:none;padding:14px 18px',text:'OK'})]);
+    form.addEventListener('submit',function(e){e.preventDefault();doSearch(inp.value)});
+    b.appendChild(form);
+    var chips=h('div',{class:'chipwrap'});
+    ['NRJ','Bel RTL','Contact','Nostalgie','Fun Radio','RTL2','Classic 21','Pure FM','Q-Music','Mix'].forEach(function(n){
+      chips.appendChild(h('button',{class:'chip',type:'button',text:n,onclick:function(){inp.value=n;doSearch(n)}}));
+    });
+    b.appendChild(chips);b.appendChild(favBox);b.appendChild(resBox);
+    b.appendChild(h('div',{class:'help',text:'Les radios viennent de l\'annuaire ouvert radio-browser.info. Touchez l\'étoile pour garder une radio dans « Mes radios » et passer de l\'une à l\'autre avec les boutons du lecteur. Une radio qui ne démarre pas est peut-être hors ligne : essayez-en une autre.'}));
+    drawFavs();
+    return {title:'Radios en direct',body:b};
+  },
+  places:function(){
+    var b=h('div');
+    function placeRow(emoji,color,label,pl,kind,idx){
+      var main=rowBtn(emoji,color,label,pl?pl.name.split(',').slice(0,2).join(','):'Définir',function(){startSaveMode(kind)});
+      main.style.borderBottom='0';
+      var wrap=h('div',{style:'display:flex;align-items:center;border-bottom:1px solid var(--navy-800)'},[main]);
+      if(pl){wrap.appendChild(h('button',{class:'del',type:'button','aria-label':'Supprimer '+label,html:CLOSE_X,onclick:function(){
+        if(kind==='home')state.places.home=null;else if(kind==='work')state.places.work=null;else state.places.list.splice(idx,1);
+        savePlaces();renderChips();renderPanel();
+      }}))}
+      b.appendChild(wrap);
+    }
+    placeRow('🏠','#2F6BFF','Domicile',state.places.home,'home');
+    placeRow('💼','#C26A1A','Travail',state.places.work,'work');
+    state.places.list.forEach(function(p,i){placeRow('⭐','#1A3678',p.name.split(',')[0],p,'new',i)});
+    b.appendChild(rowBtn('➕','#1A3678','Nouveau lieu',null,function(){startSaveMode('new')}));
+    return {title:'Domicile et travail',body:b};
+  },
+  report:function(){
+    var g=h('div',{class:'rgrid'});
+    Object.keys(TYPES).forEach(function(k){
+      var T=TYPES[k];
+      g.appendChild(h('button',{type:'button',onclick:function(){openPanel('reportConfirm',k)}},[h('span',{class:'circ',text:T.emoji}),T.label]));
+    });
+    return {title:'Que voyez-vous ?',body:g};
+  },
+  reportConfirm:function(key){
+    var T=TYPES[key],sel=0,body=h('div',{class:'rc'}),opts=h('div',{class:'opts'}),price=null;
+    var list=T.subs||[[T.label,T.emoji]];
+    if(key==='fuel'){var fw=/diesel/i.test(PROF.fuel)?'Diesel':/gpl/i.test(PROF.fuel)?'GPL':'Essence';var fi=list.findIndex(function(x){return x[0]===fw});if(fi>=0)sel=fi}
+    function draw(){
+      opts.innerHTML='';
+      list.forEach(function(s,i){
+        opts.appendChild(h('button',{class:'opt'+(i===sel?' on':''),type:'button',onclick:function(){sel=i;draw()}},[h('span',{class:'circ',text:s[1]}),s[0]]));
+      });
+    }
+    draw();body.appendChild(opts);
+    if(key==='fuel'){
+      price=h('input',{class:'field',type:'number',inputmode:'decimal',step:'0.001',min:'0',placeholder:'Prix au litre en euros','aria-label':'Prix au litre'});
+      body.appendChild(price);
+    }
+    body.appendChild(h('div',{class:'btns',style:'padding-top:14px'},[
+      h('button',{class:'btn ghost',type:'button',text:'Annuler',onclick:closePanel}),
+      h('button',{class:'btn primary',type:'button',text:'Signaler',onclick:function(){
+        var pv=null;
+        if(price){pv=parseFloat(String(price.value).replace(',','.'));if(!pv||pv<=0){toast('Indiquez le prix au litre.',3000);return}}
+        report(key,T.subs?list[sel][0]:null,pv);
+      }})
+    ]));
+    return {title:'Signaler '+T.noun,body:body};
+  }
+};
+})();
+</script>
+</body>
+</html>
