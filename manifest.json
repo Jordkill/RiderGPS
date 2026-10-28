@@ -1,0 +1,18 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "RiderGPS",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "jordkill.github",
+  "start_url": "https://jordkill.github.io/RiderGPS/",
+  "theme_color": "#0A1A3F",
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://jordkill.github.io/RiderGPS/",
+      "id": null
+    }
+  ]
+}
